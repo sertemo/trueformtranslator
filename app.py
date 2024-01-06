@@ -19,7 +19,7 @@ Script con el código de la aplicación principal en Streamlit"""
 # librerías de terceros (pip install)
 import streamlit as st
 # librerías del proyecto
-from streamlit_utils import texto, añadir_salto, imagen_con_enlace
+from streamlit_utils import texto, añadir_salto, imagen_con_enlace, footer
 
 # Constances
 LISTA_IDIOMAS = {
@@ -35,7 +35,7 @@ def main():
     st.set_page_config(
     page_title=f"TrueForm Translator",
     page_icon="📑",
-    layout="centered",
+    layout="wide",
     initial_sidebar_state="auto",
     )
     # Titulo
@@ -43,8 +43,8 @@ def main():
     # Descripción
     texto("Traduce tus documentos Word a un idioma de tu elección.", font_family='Dancing Script', centrar=True)
     añadir_salto()
+    # inputs
     col1, col2 = st.columns(2)
-
     with col1:
         texto("Idioma", font_family='Dancing Script', font_size=20, centrar=True)
         idioma = st.selectbox("idioma", options=LISTA_IDIOMAS, label_visibility="hidden")
@@ -63,25 +63,8 @@ def main():
     # Botón para traducir
     traducir = st.button(label="Traducir", use_container_width=True)
 
-    añadir_salto(5)
-    # TODO Cierre con referencia a mi redes y licencia Apache
-    col1, col2, col3, col4, col5 = st.columns(5)            
-    with col2:
-        imagen_con_enlace('https://i.imgur.com/umyrYj9.png',
-                        'https://github.com/sertemo', 
-                        alt_text='GitHub', max_width=20)
-    with col3:
-        imagen_con_enlace('https://i.imgur.com/hLAeokj.png', 
-                        'https://www.linkedin.com/in/stm84/', 
-                        alt_text='linkedin', max_width=20)
-    with col4:
-        imagen_con_enlace('https://i.imgur.com/Qc8t46o.png', 
-                        'https://stm-cv.streamlit.app/', 
-                        alt_text='Chat-CV', max_width=20)
-
-    texto('Copyright 2024 Sergio Tejedor Moreno', centrar=True, font_size=10)
-    texto("Licensed under the Apache License, Version 2.0", centrar=True, font_size=10)
-
+    # Footer
+    footer(2024, licencia=True)
 
 
 if __name__ == '__main__':

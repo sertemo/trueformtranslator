@@ -72,13 +72,13 @@ def mostrar_enlace(label:str, url:str, *, color:str=DEFAULT_COLOR, font_size:str
                     """
     st.markdown(html, unsafe_allow_html=True)
 
-def añadir_salto(num_saltos:int=1) -> None:
+def añadir_salto(num_saltos:int=1) -> st.markdown:
     """Añade <br> en forma de HTML para agregar espacio
     """
     saltos = f"{num_saltos * '<br>'}"
-    st.markdown(saltos, unsafe_allow_html=True)
+    return st.markdown(saltos, unsafe_allow_html=True)
 
-def imagen_con_enlace(url_imagen, url_enlace, alt_text="Imagen", max_width:int=100, centrar:bool=False) -> None:
+def imagen_con_enlace(url_imagen, url_enlace, alt_text="Imagen", max_width:int=100, centrar:bool=False) -> st.markdown:
     """Muestra una imagen que es también un hipervínculo en Streamlit.
 
     Args:
@@ -93,7 +93,56 @@ def imagen_con_enlace(url_imagen, url_enlace, alt_text="Imagen", max_width:int=1
                         {html}
                     </div>
                     """
-    st.markdown(html, unsafe_allow_html=True)
+    return st.markdown(html, unsafe_allow_html=True)
 
-def footer():
-    pass
+def footer(año:int, licencia:bool) -> st.markdown:
+    licencia_formateada = f"""<p class="footer-text">© {año} Sergio Tejedor Moreno</p>
+    <p class="footer-text">Licensed under the Apache License, Version 2.0</p>""" if licencia else f"""<p class="footer-text">{año} Sergio Tejedor Moreno</p>
+    <p class="footer-text">tejedor.moreno@gmail.com</p>"""
+
+    footer_formateado ="""
+    <style>
+        .footer {{
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width:100%;
+            background-color: #f0f2f6;
+        }}
+        .footer-content {{
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 100%;            
+            color: #607274;
+            text-align: center;
+            font-size: 10px;
+            padding: 10px;
+        }}
+        .iconos {{
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+            line-height: 1;
+        }}
+        .footer-text {{
+            font-size: 10px; 
+            font-family: Helvetica;
+            line-height: 0.1;
+        }}
+    </style>
+    <div class="footer">
+        <div class="footer-content">
+            <div class="iconos">
+                <a href="https://github.com/sertemo" target="_blank"><img src="https://i.imgur.com/umyrYj9.png" alt="GitHub" style="max-width:20px; height:auto;"></a>
+                <p>&nbsp&nbsp</p>
+                <a href="https://www.linkedin.com/in/stm84/" target="_blank"><img src="https://i.imgur.com/hLAeokj.png" alt="Linkedin" style="max-width:20px; height:auto;"></a>
+                <p>&nbsp&nbsp</p>
+                <a href="https://stm-cv.streamlit.app/" target="_blank"><img src="https://i.imgur.com/Qc8t46o.png" alt="Linkedin" style="max-width:20px; height:auto;"></a>
+            </div>        
+            {licencia}
+        </div>
+    </div>
+    """.format(licencia=licencia_formateada)
+    return st.markdown(footer_formateado, unsafe_allow_html=True)
