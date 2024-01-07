@@ -96,6 +96,8 @@ def imagen_con_enlace(url_imagen, url_enlace, alt_text="Imagen", max_width:int=1
     return st.markdown(html, unsafe_allow_html=True)
 
 def footer(año:int, licencia:bool) -> st.markdown:
+    """Crea un footer en la página con HTML"""
+    
     licencia_formateada = f"""<p class="footer-text">© {año} Sergio Tejedor Moreno</p>
     <p class="footer-text">Licensed under the Apache License, Version 2.0</p>""" if licencia else f"""<p class="footer-text">{año} Sergio Tejedor Moreno</p>
     <p class="footer-text">tejedor.moreno@gmail.com</p>"""

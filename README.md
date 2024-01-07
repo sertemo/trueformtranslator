@@ -22,15 +22,17 @@ Características que quiero incorporar:
         - Temática del documento
         - Documento word a traducir
 2. Extracción de todo el texto, estilos, imágenes, tamaños, negritas, encabezados, títulos, pies de página, tablas etc. Guardar en DataFrame
-3. Sacar tema del documento con Latent Dirichlet o similar y/o con las especificaciones del usuario.
-4. Pedir prompt a chatgpt con idioma y temáticas para la traducción.
-5. Mapear DataFrame y realizar las traducciones
-6. Volver a montar el documento
-7. Generar un enlace de descarga
+3. Sacar el idioma del texto automáticamente (ISO 639)
+4. Sacar tema del documento con Latent Dirichlet o similar y/o con las especificaciones del usuario.
+5. Pedir prompt a chatgpt con idioma y temáticas para la traducción.
+6. Mapear DataFrame y realizar las traducciones
+7. Volver a montar el documento
+8. Generar un enlace de descarga
 
 ## Librerías
 - poetry para la gestión de dependencias
 - python-docx para el tratamiento del documento
+- textblob y langdetect para detectar el idioma del documento
 - scikit-learn para LDA topic modelling
 - Langchain para la parte de traducción con la API de OpenAI (CHatGPT)
 - Streamlit para la GUI y el despliegue

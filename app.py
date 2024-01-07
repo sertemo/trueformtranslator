@@ -16,10 +16,13 @@ limitations under the License.
 Script con el código de la aplicación principal en Streamlit"""
 
 # librerías internas
+from io import BytesIO
 # librerías de terceros (pip install)
 import streamlit as st
 # librerías del proyecto
+from backend.extractor import feature_extractor
 from streamlit_utils import texto, añadir_salto, imagen_con_enlace, footer
+
 
 # Constances
 LISTA_IDIOMAS = {
@@ -46,22 +49,28 @@ def main():
     # inputs
     col1, col2 = st.columns(2)
     with col1:
-        texto("Idioma", font_family='Dancing Script', font_size=20, centrar=True)
+        texto("Introduce el idioma al que traducir", font_family='Dancing Script', font_size=20, centrar=True)
         idioma = st.selectbox("idioma", options=LISTA_IDIOMAS, label_visibility="hidden")
     with col2:
-        # TODO Si no ponemos temática (se saca auto) aqui puede ir la KEY de OpenAI
-        texto("¿Sobre qué trata tu documento?", font_family='Dancing Script', font_size=20, centrar=True)
-        tematica = st.text_input("tematica", label_visibility="hidden")
+        # TODO aqui puede ir la KEY de OpenAI
+        texto("Introduce tu clave", font_family='Dancing Script', font_size=20, centrar=True)
+        openai_key = st.text_input("tematica", label_visibility="hidden", help="Clave de OpenAI")
     añadir_salto()
     # Cargar el documento
     texto("Carga tu documento Word", font_family='Dancing Script', font_size=20, centrar=True)
     documento = st.file_uploader("documento", label_visibility="hidden", type=["docx"])
-    # TODO Poner text box para api key
+    if documento:
+        # Extracción de toda la información del documento
+        # TODO: Poner progreso siempre
+        st.write(feature_extractor(BytesIO(documento.read())))
+        
 
     # TODO Mostrara aqui caracteristicas del documento: número de palabras por ejemplo y coste estimado de la traducción
     añadir_salto()
     # Botón para traducir
     traducir = st.button(label="Traducir", use_container_width=True)
+
+    st.session_state
 
     # Footer
     footer(2024, licencia=True)
