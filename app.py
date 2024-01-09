@@ -20,17 +20,57 @@ from io import BytesIO
 # librerías de terceros (pip install)
 import streamlit as st
 # librerías del proyecto
-from backend.extractor import feature_extractor
+from backend.extractor import extract_xml, delete_xml_path, get_text_elements
 from streamlit_utils import texto, añadir_salto, imagen_con_enlace, footer
 
 
-# Constances
+# Constantes
 LISTA_IDIOMAS = {
     'Español',
     'Francés',
     'Inglés',
     'Alemán',
 }
+
+# Funciones
+def init() -> None:
+    """Inicializa variables de sesión necesarias
+    """
+    if st.session_state.get("parsed_document", None) is None:
+        st.session_state["parsed_document"] = False
+
+def deactivate_flag() -> None:
+    """desactiva la flag 'parsed_document' dando a entender que se ha parseado
+    un documento, es decir que se ha cargado en el uploader
+    """
+    st.session_state['parsed_document'] = False
+
+def activate_flag() -> None:
+    """desactiva la flag 'parsed_document' dando a entender que se ha parseado
+    un documento, es decir que se ha cargado en el uploader
+    """
+    st.session_state['parsed_document'] = True
+
+def reset_all() -> None:
+    """Desactiva la flag y borra la ruta xml completa
+    Borra toda la sesión
+    """
+    deactivate_flag()
+    delete_xml_path()
+    st.session_state.clear()
+
+def save_in_session_extracted_text(text:str, elements_list:list) -> None:
+    """Guarda en sesión las listas de textos extraidos y los elementos
+
+    Parameters
+    ----------
+    text : str
+        todo el texto del documento
+    elements_list : list
+        Lista con tuplas de textos, elementos
+    """
+    st.session_state['text'] = text
+    st.session_state['elements_list'] = elements_list
 
 
 def main():
@@ -41,6 +81,8 @@ def main():
     layout="wide",
     initial_sidebar_state="auto",
     )
+    # inicializamos session state
+    init()
     # Titulo
     texto("TrueForm Translator", font_family='Rubik Doodle Shadow', font_size=60, centrar=True)
     # Descripción
@@ -52,17 +94,23 @@ def main():
         texto("Introduce el idioma al que traducir", font_family='Dancing Script', font_size=20, centrar=True)
         idioma = st.selectbox("idioma", options=LISTA_IDIOMAS, label_visibility="hidden")
     with col2:
-        # TODO aqui puede ir la KEY de OpenAI
+        # KEY de OpenAI
         texto("Introduce tu clave", font_family='Dancing Script', font_size=20, centrar=True)
         openai_key = st.text_input("tematica", label_visibility="hidden", help="Clave de OpenAI")
     añadir_salto()
     # Cargar el documento
     texto("Carga tu documento Word", font_family='Dancing Script', font_size=20, centrar=True)
-    documento = st.file_uploader("documento", label_visibility="hidden", type=["docx"])
-    if documento:
-        # Extracción de toda la información del documento
+    documento = st.file_uploader("documento", label_visibility="hidden", type=["docx"], on_change=reset_all)
+    if documento and not st.session_state.get('parsed_document'):
         # TODO: Poner progreso siempre
-        st.write(feature_extractor(BytesIO(documento.read())))
+        # Descomprimimos el documento
+        extract_xml(BytesIO(documento.read()))
+        # Extraemos los textos del document.xml y sus elementos para poder modificar
+        text, element_list = get_text_elements()
+        # Guardamos en sesión
+        save_in_session_extracted_text(text, element_list)
+        # Activamos la flag para indicar que se ha cargado archivo correctamente
+        activate_flag()
         
 
     # TODO Mostrara aqui caracteristicas del documento: número de palabras por ejemplo y coste estimado de la traducción

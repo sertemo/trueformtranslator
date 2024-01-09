@@ -15,23 +15,26 @@ Características que quiero incorporar:
 - Pasar un modelo de OCR (Reconocimiento de caracteres) sobre las imágenes por si tienen texto ? para traducirlas después?
 
 ## Etapas
-1. Crear frontend GUI con streamlit:
+1. Crear frontend GUI con streamlit: [x]
     - inputs:
         - OpenAI API KEY
         - Idioma destino
-        - Temática del documento
         - Documento word a traducir
-2. Extracción de todo el texto, estilos, imágenes, tamaños, negritas, encabezados, títulos, pies de página, tablas etc. Guardar en DataFrame
-3. Sacar el idioma del texto automáticamente (ISO 639)
-4. Sacar tema del documento con Latent Dirichlet o similar y/o con las especificaciones del usuario.
-5. Pedir prompt a chatgpt con idioma y temáticas para la traducción.
-6. Mapear DataFrame y realizar las traducciones
-7. Volver a montar el documento
-8. Generar un enlace de descarga
+2. Descompresión del docx en su estructura de archivo xml [x]
+3. Extracción del texto y sus elementos del archivo document.xml [x]
+4. Sacar el idioma del texto automáticamente (ISO 639) []
+5. Sacar tema del documento con Latent Dirichlet o similar y/o con las especificaciones del usuario. []
+6. Pedir prompt a chatgpt con idioma y temáticas para la traducción. []
+7. Mapear los textos y realizar las traducciones []
+8. Modificar cada elemento con su texto traducido. []
+9. Guardar el archivo xml sustituyendo el anterior []
+10. Montar de nuevo un docx (zipfile) []
+11. Generar un enlace de descarga []
 
 ## Librerías
 - poetry para la gestión de dependencias
-- python-docx para el tratamiento del documento
+- zipfile para la descompresión del docx
+- xml.etree.ElementTree para la gestión del documento xml.
 - textblob y langdetect para detectar el idioma del documento
 - scikit-learn para LDA topic modelling
 - Langchain para la parte de traducción con la API de OpenAI (CHatGPT)
