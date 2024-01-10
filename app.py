@@ -17,10 +17,14 @@ Script con el código de la aplicación principal en Streamlit"""
 
 # librerías internas
 from io import BytesIO
+import time
 # librerías de terceros (pip install)
 import streamlit as st
 # librerías del proyecto
-from backend.extractor import extract_xml, delete_xml_path, get_text_elements
+from backend.extractor import (extract_xml, 
+                                delete_xml_path, 
+                                get_text_elements,
+                                get_language)
 from streamlit_utils import texto, añadir_salto, imagen_con_enlace, footer
 
 
@@ -59,18 +63,20 @@ def reset_all() -> None:
     delete_xml_path()
     st.session_state.clear()
 
-def save_in_session_extracted_text(text:str, elements_list:list) -> None:
+def save_in_session(keys:list, values:list) -> None:
     """Guarda en sesión las listas de textos extraidos y los elementos
 
     Parameters
     ----------
-    text : str
-        todo el texto del documento
-    elements_list : list
-        Lista con tuplas de textos, elementos
+    keys : list
+        Lista con los nombres de las variables a guardar
+    values : list
+        Lista con los valores de las variables a guardar
     """
-    st.session_state['text'] = text
-    st.session_state['elements_list'] = elements_list
+    if len(keys) != len(values):
+        raise ValueError(f"keys y values deben tener la misma longitud: {len(keys)} != {len(values)}")
+    for k, v in zip(keys,values):
+        st.session_state[k] = v
 
 
 def main():
@@ -96,19 +102,34 @@ def main():
     with col2:
         # KEY de OpenAI
         texto("Introduce tu clave", font_family='Dancing Script', font_size=20, centrar=True)
-        openai_key = st.text_input("tematica", label_visibility="hidden", help="Clave de OpenAI")
+        openai_key = st.text_input("openai_key", label_visibility="hidden", help="Clave de OpenAI")
     añadir_salto()
     # Cargar el documento
     texto("Carga tu documento Word", font_family='Dancing Script', font_size=20, centrar=True)
     documento = st.file_uploader("documento", label_visibility="hidden", type=["docx"], on_change=reset_all)
     if documento and not st.session_state.get('parsed_document'):
-        # TODO: Poner progreso siempre
+        # TODO Meter toda la pipeline en una función cuando esté terminada
+        # Creamos la barra de progreso
+        my_bar = st.progress(0)
+        t_wait = 0.2
         # Descomprimimos el documento
+        my_bar.progress(0.25, 'Descomprimiendo el documento...')
         extract_xml(BytesIO(documento.read()))
+        time.sleep(t_wait)
         # Extraemos los textos del document.xml y sus elementos para poder modificar
+        my_bar.progress(0.5, 'Extrayendo los textos...')
         text, element_list = get_text_elements()
-        # Guardamos en sesión
-        save_in_session_extracted_text(text, element_list)
+        time.sleep(t_wait)     
+        # Sacamos el idioma del texto
+        my_bar.progress(0.75, 'Identificando el idioma del documento...')
+        idioma_es, idioma_en = get_language(text)
+        time.sleep(t_wait)
+        # Guardamos todo en sesión
+        my_bar.progress(1, 'Guardando en sesión...')
+        save_in_session(['text', 'elements_list', 'idioma_es', 'idioma_en'], 
+                        [text, element_list, idioma_es, idioma_en])
+        time.sleep(t_wait)
+        my_bar.empty()
         # Activamos la flag para indicar que se ha cargado archivo correctamente
         activate_flag()
         

@@ -13,12 +13,17 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-Script con el código relacionado con la extracción de la información del documento Word
+Script con el código relacionado con la extracción de la información
+y/o propiedades del documento Word
     """
 
 from docx import Document
+from langdetect import detect, DetectorFactory
+import nltk
 from pathlib import Path
+import pycountry
 import shutil
+from textblob import TextBlob
 import xml.etree.ElementTree as ET
 import zipfile
 
@@ -76,3 +81,32 @@ def get_text_elements() -> tuple[str, list]:
             text_elements.append((text_elem, text_elem.text))
         texto += "\n" + " ".join(para_text)
     return texto, text_elements
+
+def get_language(text:str) -> tuple[str]:
+    """Dado un texto en str, devuelve el idioma del texto en
+    español y en inglés
+
+    Parameters
+    ----------
+    text : str
+        Texto a extraer el idioma
+
+    Returns
+    -------
+    tuple[str]
+        Tupla con el nombre del idioma en español y en inglés:
+        idioma_es, idioma_en
+    """
+    # Para que sea determinista
+    DetectorFactory.seed = 0
+    # Escribimos el texto a traducir
+    # Sacamos el idioma en formato ISO 639 y en lenguaje natural
+    idioma_iso = detect(text)
+    idioma_en = pycountry.languages.get(alpha_2=idioma_iso).name
+    # Como lo saca en inglés, pasamos por textblob para tenerlo en español
+    idioma_es = TextBlob(idioma_en).translate(from_lang='en', to='es').string
+    return idioma_es, idioma_en
+
+def get_topics(corpus:list, language:str):
+    nltk.download('stopwords')
+    pass
