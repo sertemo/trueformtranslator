@@ -17,7 +17,11 @@ Script con el código relacionado con la extracción de la información
 y/o propiedades del documento Word
     """
 
+from backend.chains import get_topic_chain
+from backend.utils import get_chunk
+from collections import namedtuple
 from docx import Document
+from langchain_community.callbacks import get_openai_callback
 from langdetect import detect, DetectorFactory
 import nltk
 from pathlib import Path
@@ -27,9 +31,11 @@ from textblob import TextBlob
 import xml.etree.ElementTree as ET
 import zipfile
 
+# Constantes
 XML_FOLDER = Path('backend/docx_xml')
 DOCUMENT_XML_PATH = XML_FOLDER / Path('word') / 'document.xml'
-
+# Objetos
+TopicResponse = namedtuple('TopicResponse', ['response', 'total_cost'])
 
 def extract_xml(document:bytes) -> None:
     """Dado un documento docx en bytes, lo descomprime
@@ -82,13 +88,13 @@ def get_text_elements() -> tuple[str, list]:
         texto += "\n" + " ".join(para_text)
     return texto, text_elements
 
-def get_language(text:str) -> tuple[str]:
+def get_language(corpus:str) -> tuple[str]:
     """Dado un texto en str, devuelve el idioma del texto en
     español y en inglés
 
     Parameters
     ----------
-    text : str
+    corpus : str
         Texto a extraer el idioma
 
     Returns
@@ -101,12 +107,60 @@ def get_language(text:str) -> tuple[str]:
     DetectorFactory.seed = 0
     # Escribimos el texto a traducir
     # Sacamos el idioma en formato ISO 639 y en lenguaje natural
-    idioma_iso = detect(text)
+    idioma_iso = detect(corpus)
     idioma_en = pycountry.languages.get(alpha_2=idioma_iso).name
     # Como lo saca en inglés, pasamos por textblob para tenerlo en español
     idioma_es = TextBlob(idioma_en).translate(from_lang='en', to='es').string
     return idioma_es, idioma_en
 
-def get_topics(corpus:list, language:str):
-    nltk.download('stopwords')
-    pass
+def get_num_words(corpus:str) -> int:
+    """Devuelve el número de palabras aproximado del corpus
+
+    Parameters
+    ----------
+    corpus : str
+        _description_
+
+    Returns
+    -------
+    int
+        _description_
+    """
+    return len(corpus.split())
+
+def get_topic(corpus:str, language:str, doc_name:str) -> TopicResponse:
+    """Dado un corpus en formato string y un idioma,
+    devuelve el tipo de documento o la temática del documento
+    junto con el coste de la llamada a la API de OpenAI.
+    Devuelve un objeto con los dos atributos
+
+    Parameters
+    ----------
+    corpus : str
+        texto del documento
+    language : str
+        idioma del documento
+
+    Returns
+    -------
+    namedtuple[str]
+        respuesta, coste
+    """
+    # Lo primero es crear un dataset. Spliteamos por salto de linea
+    dataset = corpus.split('\n')
+    # Sacamos dos chunk de todo el documento para enviar a openai
+    chunk_1 = get_chunk(dataset)
+    chunk_2 = get_chunk(dataset)
+    # Instanciamos la chain
+    chain = get_topic_chain()
+    # Envolvemos en callback para sacar el coste
+    with get_openai_callback() as cb:
+        response = chain.invoke({
+            'idioma': language,
+            'extracto_1': chunk_1,
+            'extracto_2': chunk_2,
+            'nombre_documento': doc_name,
+        })
+        coste_total = cb.total_cost
+    # Creamos un objeto para retornar    
+    return TopicResponse(response, coste_total)

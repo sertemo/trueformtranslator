@@ -23,14 +23,14 @@ Características que quiero incorporar:
 - [x] Descompresión del docx en su estructura de archivo xml
 - [x] Extracción del texto y sus elementos del archivo document.xml
 - [x] Sacar el idioma del texto automáticamente (ISO 639)
-- [] Sacar tema del documento preguntando a OpenAI.
-- [] Realizar validaciones
+- [x] Sacar tema del documento preguntando a OpenAI trackeando costes.
 - [] Pedir prompt a chatgpt con idioma y temáticas para la traducción.
+- [] Realizar validaciones.
 - [] Mapear los textos y realizar las traducciones.
 - [] Modificar cada elemento con su texto traducido.
 - [] Guardar el archivo xml sustituyendo el anterior.
 - [] Montar de nuevo un docx (zipfile)
-- [] Generar un enlace de descarga []
+- [] Generar un enlace de descarga
 
 ## Librerías
 - poetry para la gestión de dependencias

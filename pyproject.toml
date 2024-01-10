@@ -20,6 +20,7 @@ cohere = "^4.41"
 langchain-openai = "^0.0.2"
 langchain-community = "^0.0.11"
 langchain-core = "^0.1.9"
+python-dotenv = "^1.0.0"
 
 
 [build-system]

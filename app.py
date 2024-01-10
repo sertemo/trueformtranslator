@@ -19,12 +19,17 @@ Script con el código de la aplicación principal en Streamlit"""
 from io import BytesIO
 import time
 # librerías de terceros (pip install)
+from dotenv import load_dotenv
 import streamlit as st
 # librerías del proyecto
 from backend.extractor import (extract_xml, 
                                 delete_xml_path, 
                                 get_text_elements,
-                                get_language)
+                                get_language,
+                                get_topic,
+                                get_num_words,
+                                TopicResponse,
+                                )
 from streamlit_utils import texto, añadir_salto, imagen_con_enlace, footer
 
 
@@ -78,6 +83,23 @@ def save_in_session(keys:list, values:list) -> None:
     for k, v in zip(keys,values):
         st.session_state[k] = v
 
+def accumulate_in_session(keys:list, values:list[int|float]) -> None:
+    """Acumula los valores pasados. Solo válido para números
+
+    Parameters
+    ----------
+    keys : list
+        lista de las keys a acumular
+    values : list[int|float]
+        valores a acumular
+    """
+    if len(keys) != len(values):
+        raise ValueError(f"keys y values deben tener la misma longitud: {len(keys)} != {len(values)}")
+    for k, v in zip(keys,values):
+        if not isinstance(v, (int, float)):
+            raise TypeError(f"Sólo válidos int o float, no {type(v)}.")
+        st.session_state[k] = st.session_state.get(k, 0) + v
+
 
 def main():
     # Configuración de la app
@@ -87,6 +109,8 @@ def main():
     layout="wide",
     initial_sidebar_state="auto",
     )
+    # Cargamos variables de entorno
+    load_dotenv()
     # inicializamos session state
     init()
     # Titulo
@@ -119,15 +143,23 @@ def main():
         # Extraemos los textos del document.xml y sus elementos para poder modificar
         my_bar.progress(0.5, 'Extrayendo los textos...')
         text, element_list = get_text_elements()
+        num_words = get_num_words(text)
         time.sleep(t_wait)     
         # Sacamos el idioma del texto
         my_bar.progress(0.75, 'Identificando el idioma del documento...')
         idioma_es, idioma_en = get_language(text)
         time.sleep(t_wait)
+        # Sacamos el tema del documento
+        my_bar.progress(0.9, 'Identificando la temática del documento...')
+        topic:TopicResponse = get_topic(text, idioma_es, documento.name)
         # Guardamos todo en sesión
         my_bar.progress(1, 'Guardando en sesión...')
-        save_in_session(['text', 'elements_list', 'idioma_es', 'idioma_en'], 
-                        [text, element_list, idioma_es, idioma_en])
+        save_in_session(['text', 'elements_list', 'idioma_es', 'idioma_en', 'tematica',
+                            'num_words'], 
+                        [text, element_list, idioma_es, idioma_en, topic.response,
+                            num_words])
+        # Acumulamos los costes
+        accumulate_in_session(['total_cost'], [topic.total_cost])
         time.sleep(t_wait)
         my_bar.empty()
         # Activamos la flag para indicar que se ha cargado archivo correctamente
