@@ -1,27 +1,28 @@
-"""
-Copyright 2024 Sergio Tejedor Moreno
+# Copyright 2024 Sergio Tejedor Moreno
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-Script con el código de la aplicación principal en Streamlit"""
+# Script con el código de la aplicación principal en Streamlit
 
 # librerías internas
 from io import BytesIO
 import time
-# librerías de terceros (pip install)
+# librerías de terceros
 from dotenv import load_dotenv
+import pandas as pd
 import streamlit as st
 # librerías del proyecto
+from backend.db import UserDBHandler
 from backend.extractor import (extract_xml, 
                                 delete_xml_path, 
                                 get_text_elements,
@@ -30,22 +31,38 @@ from backend.extractor import (extract_xml,
                                 get_num_words,
                                 TopicResponse,
                                 )
+from backend.validator import exists_apikey
 from streamlit_utils import texto, añadir_salto, imagen_con_enlace, footer
 
 
 # Constantes
-LISTA_IDIOMAS = {
+LISTA_IDIOMAS = [
     'Español',
     'Francés',
     'Inglés',
     'Alemán',
-}
+]
+LISTA_ESPECIALIDADES = [
+    'Genérico',
+    'Aplicaciones y móvil',
+    'Belleza, Moda Cosmética',
+    'Empresa y finanzas',
+    'Legal',
+    'Fabricación e ingeniería',
+    'Marketing SEO, publicidad',
+    'Médica',
+    'Novela',
+    'Tecnología y Software',
+    'Videojuegos',
+]
+# Instanciamos el handler para interacción con db
+db_handler = UserDBHandler('usuarios')
 
 # Funciones
 def init() -> None:
     """Inicializa variables de sesión necesarias
     """
-    if st.session_state.get("parsed_document", None) is None:
+    if st.session_state.get("parsed_document") is None:
         st.session_state["parsed_document"] = False
 
 def deactivate_flag() -> None:
@@ -122,11 +139,20 @@ def main():
     col1, col2 = st.columns(2)
     with col1:
         texto("Introduce el idioma al que traducir", font_family='Dancing Script', font_size=20, centrar=True)
-        idioma = st.selectbox("idioma", options=LISTA_IDIOMAS, label_visibility="hidden")
+        idioma = st.selectbox("idioma", 
+                            options=LISTA_IDIOMAS, 
+                            label_visibility="hidden",
+                            index=1)
     with col2:
         # KEY de OpenAI
         texto("Introduce tu clave", font_family='Dancing Script', font_size=20, centrar=True)
-        openai_key = st.text_input("openai_key", label_visibility="hidden", help="Clave de OpenAI")
+        api_key = st.text_input("openai_key", label_visibility="hidden", help="Clave de OpenAI")
+    añadir_salto()
+    texto("Marca la especialización de tu documento", font_family='Dancing Script', font_size=20, centrar=True)
+    especializacion = st.selectbox("especializacion", 
+                                options=LISTA_ESPECIALIDADES, 
+                                label_visibility="hidden",
+                                index=0)
     añadir_salto()
     # Cargar el documento
     texto("Carga tu documento Word", font_family='Dancing Script', font_size=20, centrar=True)
@@ -154,9 +180,11 @@ def main():
         topic:TopicResponse = get_topic(text, idioma_es, documento.name)
         # Guardamos todo en sesión
         my_bar.progress(1, 'Guardando en sesión...')
-        save_in_session(['text', 'elements_list', 'idioma_es', 'idioma_en', 'tematica',
+        # Creamos el DataFrame sobre el que trabajaremos
+        doc_df = pd.DataFrame(element_list, columns=['element', 'text'])
+        save_in_session(['doc_df', 'text', 'elements_list', 'idioma_es', 'idioma_en', 'tematica',
                             'num_words'], 
-                        [text, element_list, idioma_es, idioma_en, topic.response,
+                        [doc_df, text, element_list, idioma_es, idioma_en, topic.response,
                             num_words])
         # Acumulamos los costes
         accumulate_in_session(['total_cost'], [topic.total_cost])
@@ -164,12 +192,25 @@ def main():
         my_bar.empty()
         # Activamos la flag para indicar que se ha cargado archivo correctamente
         activate_flag()
+    #! borrar
+    if 'doc_df' in st.session_state:
+        st.dataframe(st.session_state['doc_df'])
         
 
     # TODO Mostrara aqui caracteristicas del documento: número de palabras por ejemplo y coste estimado de la traducción
     añadir_salto()
     # Botón para traducir
     traducir = st.button(label="Traducir", use_container_width=True)
+    if traducir and st.session_state.get('parsed_document'):
+        # TODO Verificar que el idioma destino != idioma del documento
+        # TODO Verificar si APi key insertada
+        # TODO Verificar si apikey existe
+        if not exists_apikey(api_key, db_handler):
+            st.error("La clave no es válida.")
+        # TODO Verificar si apikey de admin
+        # TODO Verificar si usuario activo
+        # TODO Verificar si usuario palabras consumidas + palabras del documento < palabras contratadas
+
 
     st.session_state
 

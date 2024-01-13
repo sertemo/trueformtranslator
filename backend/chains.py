@@ -56,9 +56,8 @@ def get_topic_chain() -> RunnableSequence:
     """
     prompt_traduccion = ChatPromptTemplate.from_template('''
     Eres un excelente identificador de documentos a partir de sus extractos.
-    Se te van a pasar dos extractos de un documento en {idioma} llamado {nombre_documento}.
-    Tu misión es identificar el tipo de documento al que pertenecen esos extractos.
-    Lo importante es obtener información del documento al que pertenecen no los extractos.
+    Se te van a pasar dos extractos en {idioma} que pertenecen a un mismo documento llamado {nombre_documento}.
+    Tu misión es obtener información del documento al que pertenecen esos extractos.
     Responde en español.
     Responde solo con los detalles del tipo de documento al que pertenece el extracto.
     Responde breve.

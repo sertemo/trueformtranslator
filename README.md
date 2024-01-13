@@ -24,8 +24,10 @@ Características que quiero incorporar:
 - [x] Extracción del texto y sus elementos del archivo document.xml
 - [x] Sacar el idioma del texto automáticamente (ISO 639)
 - [x] Sacar tema del documento preguntando a OpenAI trackeando costes.
-- [] Pedir prompt a chatgpt con idioma y temáticas para la traducción.
+- [] Realizar la lógica con DB
+- [] Pedir prompt a chatgpt con idioma, especialización y temáticas para la traducción.
 - [] Realizar validaciones.
+- [] Crear el DataFrame
 - [] Mapear los textos y realizar las traducciones.
 - [] Modificar cada elemento con su texto traducido.
 - [] Guardar el archivo xml sustituyendo el anterior.

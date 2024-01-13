@@ -16,6 +16,8 @@ limitations under the License.
 Script con funciones auxiliares
     """
 
+from datetime import datetime
+import pytz
 import random
 
 def get_chunk(dataset:list[str], num_samples:int=5) -> str:
@@ -37,3 +39,14 @@ def get_chunk(dataset:list[str], num_samples:int=5) -> str:
     indice_inf = random.randint(0, len(dataset) - num_samples)
     chunk = dataset[indice_inf:indice_inf+num_samples]
     return " ".join(chunk)
+
+def get_datetime_formatted()-> str:
+    """Devuelve la fecha actual formateada en str como:
+    %d-%m-%Y %H:%M:%S
+
+    Returns
+    -------
+    str
+        _description_
+    """
+    return datetime.strftime(datetime.now(tz=pytz.timezone('Europe/Madrid')), format="%d-%m-%Y %H:%M:%S")
