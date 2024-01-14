@@ -15,6 +15,7 @@
 # Script con el código de la aplicación principal en Streamlit
 
 # librerías internas
+from functools import partial
 from io import BytesIO
 import time
 # librerías de terceros
@@ -31,7 +32,9 @@ from backend.extractor import (extract_xml,
                                 get_num_words,
                                 TopicResponse,
                                 )
-from backend.validator import exists_apikey
+from backend.validator import (exists_apikey, 
+                                apikey_is_admin,
+                                apikey_is_active)
 from streamlit_utils import texto, añadir_salto, imagen_con_enlace, footer
 
 
@@ -57,6 +60,8 @@ LISTA_ESPECIALIDADES = [
 ]
 # Instanciamos el handler para interacción con db
 db_handler = UserDBHandler('usuarios')
+# instancia footer con argumentos fijos
+put_footer = partial(footer, 2024, True)
 
 # Funciones
 def init() -> None:
@@ -117,6 +122,26 @@ def accumulate_in_session(keys:list, values:list[int|float]) -> None:
             raise TypeError(f"Sólo válidos int o float, no {type(v)}.")
         st.session_state[k] = st.session_state.get(k, 0) + v
 
+def show_error(msg:str, progress_bar=None) -> None:
+    """Función que realiza 4 cosas:
+    muestra mensaje de error
+    vacía la barra de progreso si hay
+    muestra el footer de la app
+    para la ejecución de la appa
+
+    Parameters
+    ----------
+    msg : str
+        _description_
+    progress_bar : _type_
+        _description_
+    """
+    st.error(msg, icon='🛑')
+    put_footer()
+    if progress_bar is not None:
+        progress_bar.empty()
+    st.stop()
+
 
 def main():
     # Configuración de la app
@@ -126,8 +151,6 @@ def main():
     layout="wide",
     initial_sidebar_state="auto",
     )
-    # Cargamos variables de entorno
-    load_dotenv()
     # inicializamos session state
     init()
     # Titulo
@@ -146,7 +169,7 @@ def main():
     with col2:
         # KEY de OpenAI
         texto("Introduce tu clave", font_family='Dancing Script', font_size=20, centrar=True)
-        api_key = st.text_input("openai_key", label_visibility="hidden", help="Clave de OpenAI")
+        clave = st.text_input("clave", label_visibility="hidden", help="Tu clave personal dada por el administrador.")
     añadir_salto()
     texto("Marca la especialización de tu documento", font_family='Dancing Script', font_size=20, centrar=True)
     especializacion = st.selectbox("especializacion", 
@@ -160,62 +183,84 @@ def main():
     if documento and not st.session_state.get('parsed_document'):
         # TODO Meter toda la pipeline en una función cuando esté terminada
         # Creamos la barra de progreso
-        my_bar = st.progress(0)
+        preprocess_bar = st.progress(0)
         t_wait = 0.2
         # Descomprimimos el documento
-        my_bar.progress(0.25, 'Descomprimiendo el documento...')
+        preprocess_bar.progress(0.25, 'Descomprimiendo el documento...')
         extract_xml(BytesIO(documento.read()))
         time.sleep(t_wait)
         # Extraemos los textos del document.xml y sus elementos para poder modificar
-        my_bar.progress(0.5, 'Extrayendo los textos...')
+        preprocess_bar.progress(0.5, 'Extrayendo los textos...')
         text, element_list = get_text_elements()
         num_words = get_num_words(text)
         time.sleep(t_wait)     
         # Sacamos el idioma del texto
-        my_bar.progress(0.75, 'Identificando el idioma del documento...')
+        preprocess_bar.progress(0.75, 'Identificando el idioma del documento...')
         idioma_es, idioma_en = get_language(text)
         time.sleep(t_wait)
         # Sacamos el tema del documento
-        my_bar.progress(0.9, 'Identificando la temática del documento...')
+        preprocess_bar.progress(0.9, 'Identificando la temática del documento...')
         topic:TopicResponse = get_topic(text, idioma_es, documento.name)
         # Guardamos todo en sesión
-        my_bar.progress(1, 'Guardando en sesión...')
+        preprocess_bar.progress(1, 'Guardando en sesión...')
         # Creamos el DataFrame sobre el que trabajaremos
-        doc_df = pd.DataFrame(element_list, columns=['element', 'text'])
-        save_in_session(['doc_df', 'text', 'elements_list', 'idioma_es', 'idioma_en', 'tematica',
+        #doc_df = pd.DataFrame(element_list, columns=['element', 'text'])
+        # TODO parece que hay errores a la hora de convertir a df
+        save_in_session(['text', 'elements_list', 'idioma_es', 'idioma_en', 'tematica',
                             'num_words'], 
-                        [doc_df, text, element_list, idioma_es, idioma_en, topic.response,
+                        [text, element_list, idioma_es, idioma_en, topic.response,
                             num_words])
         # Acumulamos los costes
         accumulate_in_session(['total_cost'], [topic.total_cost])
         time.sleep(t_wait)
-        my_bar.empty()
+        preprocess_bar.empty()
         # Activamos la flag para indicar que se ha cargado archivo correctamente
         activate_flag()
-    #! borrar
-    if 'doc_df' in st.session_state:
-        st.dataframe(st.session_state['doc_df'])
-        
 
-    # TODO Mostrara aqui caracteristicas del documento: número de palabras por ejemplo y coste estimado de la traducción
     añadir_salto()
     # Botón para traducir
     traducir = st.button(label="Traducir", use_container_width=True)
     if traducir and st.session_state.get('parsed_document'):
-        # TODO Verificar que el idioma destino != idioma del documento
-        # TODO Verificar si APi key insertada
-        # TODO Verificar si apikey existe
-        if not exists_apikey(api_key, db_handler):
-            st.error("La clave no es válida.")
-        # TODO Verificar si apikey de admin
-        # TODO Verificar si usuario activo
-        # TODO Verificar si usuario palabras consumidas + palabras del documento < palabras contratadas
+        # Creamos la barra de progreso
+        validation_bar = st.progress(0)
+        t_wait = 0.2
+        # VALIDACIONES
+        # Verificar que el idioma destino != idioma del documento
+        validation_bar.progress(0.16, 'Verificando idiomas...')
+        time.sleep(t_wait)
+        if st.session_state['idioma_es'].lower() == idioma.lower():
+            show_error(f'El idioma del documento y el idioma de destino no pueden coincidir.', validation_bar)         
+        # Verificar si la clave está insertada
+        validation_bar.progress(0.16, 'Verificando clave...')
+        time.sleep(t_wait)
+        if not clave:
+            show_error('Inserta una clave válida para continuar.', validation_bar)
+        # Verificar si clave (o apikey) existe
+        validation_bar.progress(0.16, 'Verificando clave...')
+        time.sleep(t_wait)
+        if not exists_apikey(clave, db_handler):
+            show_error("La clave no es válida.", validation_bar)
+        # Verificar si apikey de admin
+        validation_bar.progress(0.16, 'Verificando clave...')
+        time.sleep(t_wait)
+        if not apikey_is_admin(clave, db_handler):
+            # Mostramos nombre del usuario
+            user_name = db_handler.get_nombre(clave)
+            st.info(f'Accediendo a la clave de {user_name}.')
+            # Verificar si usuario activo
+            validation_bar.progress(0.16, 'Verificando usuario activo...')
+            time.sleep(t_wait)
+            if not apikey_is_active(clave, db_handler):
+                show_error("Tu clase no está activada. Contacta con el administrador.", validation_bar)
+            # TODO Verificar si usuario palabras consumidas + palabras del documento < palabras contratadas
+            validation_bar.progress(0.16, 'Verificando palabras restantes...')
+            time.sleep(t_wait)
 
 
     st.session_state
 
     # Footer
-    footer(2024, licencia=True)
+    put_footer()
 
 
 if __name__ == '__main__':

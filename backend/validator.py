@@ -16,7 +16,45 @@
 
 from .db import UserDBHandler
 
-def exists_apikey(apikey:str, handler:UserDBHandler) -> bool:
-    if handler.get_api_key(apikey) is not None:
+def exists_apikey(clave:str, handler:UserDBHandler) -> bool:
+    """True si la apikey existe en base de datos
+
+    Parameters
+    ----------
+    apikey : str
+        _description_
+    handler : UserDBHandler
+        _description_
+
+    Returns
+    -------
+    bool
+        _description_
+    """
+    if handler.get_api_key(clave) is not None:
+        return True
+    return False
+
+def apikey_is_admin(clave:str, handler:UserDBHandler) -> bool:
+    """True si la apikey es de admin
+
+    Parameters
+    ----------
+    apikey : str
+        _description_
+    handler : UserDBHandler
+        _description_
+
+    Returns
+    -------
+    bool
+        _description_
+    """
+    if handler.get_admin(clave):
+        return True
+    return False
+
+def apikey_is_active(clave:str, handler:UserDBHandler) -> bool:
+    if handler.get_activo(clave):
         return True
     return False

@@ -19,6 +19,7 @@ from collections.abc import Sequence
 import os
 from typing import Any, Union
 
+from dotenv import load_dotenv
 from passlib.context import CryptContext
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
@@ -27,6 +28,8 @@ from .utils import get_datetime_formatted
 
 DEFAULT_DB = 'TrueFormTranslator'
 HASH_SCHEMA = CryptContext(schemes=["bcrypt"], deprecated= "auto")
+
+load_dotenv()
 
 def hash_apikey(key:str) -> str:
     """Devuelve una key hasheada
@@ -38,10 +41,28 @@ def hash_apikey(key:str) -> str:
     """
     return HASH_SCHEMA.hash(key)
 
+def verify_apikey(key:str, key_hash:str) -> bool:
+    """Comprueba si la key y la hash key coinciden
+
+    Parameters
+    ----------
+    key : str
+        _description_
+    key_hash : str
+        _description_
+
+    Returns
+    -------
+    bool
+        _description_
+    """
+    return HASH_SCHEMA.verify(key, key_hash)
+
 class UsuarioDB(BaseModel):
     nombre:str
     email:str
     telefono:str
+    clave:str
     apikey:str
     fecha_alta:str = Field(default_factory=get_datetime_formatted)
     activo:bool = True
@@ -139,39 +160,43 @@ class UserDBHandler(DBHandler):
         self.conn = self.db[self.collection]
 
 
-    def get_activo(self, hash_apikey:str) -> bool:
-        user_dict = self.conn.find_one({"apikey": hash_apikey})
-        return user_dict["activo"]
+    def get_activo(self, clave:str) -> bool:
+        user_dict = self.conn.find_one({"clave": clave})
+        return user_dict.get("activo")
     
     
-    def get_name(self, hash_apikey:str) -> str:
-        user_dict = self.conn.find_one({"apikey": hash_apikey})
-        return user_dict["nombre"]    
+    def get_name(self, clave:str) -> str:
+        user_dict = self.conn.find_one({"clave": clave})
+        return user_dict.get("nombre") 
 
     
-    def get_email(self, hash_apikey:str) -> str:
-        user_dict = self.conn.find_one({"apikey": hash_apikey})
-        return user_dict["email"]
+    def get_email(self, clave:str) -> str:
+        user_dict = self.conn.find_one({"clave": clave})
+        return user_dict.get("email")
     
     
-    def get_admin(self, hash_apikey:str) -> str:
-        user_dict:dict = self.conn.find_one({"apikey": hash_apikey})
+    def get_admin(self, clave:str) -> str:
+        user_dict:dict = self.conn.find_one({"clave": clave})
         return user_dict.get("admin")
     
     
-    def get_api_key(self, hash_apikey:str) -> str | None:
-        user_dict:dict = self.conn.find_one({"apikey": hash_apikey})
-        return user_dict.get("apikey")
+    def get_api_key(self, clave:str) -> str | None:
+        user_dict:dict = self.conn.find_one({"clave": clave})
+        return user_dict.get("apikey") if user_dict is not None else None
     
     
-    def get_palabras_limite(self, hash_apikey:str) -> int:
-        user_dict:dict = self.conn.find_one({"apikey": hash_apikey})
+    def get_palabras_limite(self, clave:str) -> int:
+        user_dict:dict = self.conn.find_one({"clave": clave})
         return user_dict.get("palabras_limite")
     
 
-    def get_palabras_actual(self, hash_apikey:str) -> int:
-        user_dict:dict = self.conn.find_one({"apikey": hash_apikey})
+    def get_palabras_actual(self, clave:str) -> int:
+        user_dict:dict = self.conn.find_one({"clave": clave})
         return user_dict.get("get_palabras_actual")
+    
+    def get_nombre(self, clave:str) -> int:
+        user_dict:dict = self.conn.find_one({"clave": clave})
+        return user_dict.get("nombre")
 
 
 
