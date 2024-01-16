@@ -22,6 +22,7 @@ import time
 from dotenv import load_dotenv
 import pandas as pd
 import streamlit as st
+from streamlit import delta_generator
 # librerías del proyecto
 from backend.db import UserDBHandler
 from backend.extractor import (extract_xml, 
@@ -32,9 +33,13 @@ from backend.extractor import (extract_xml,
                                 get_num_words,
                                 TopicResponse,
                                 )
+from backend.translator import (get_translation_prompt,
+                                PromptTransResponse)
 from backend.validator import (exists_apikey, 
                                 apikey_is_admin,
-                                apikey_is_active)
+                                apikey_is_active,
+                                has_words_left)
+from backend.utils import estimate_openai_cost
 from streamlit_utils import texto, añadir_salto, imagen_con_enlace, footer
 
 
@@ -122,12 +127,12 @@ def accumulate_in_session(keys:list, values:list[int|float]) -> None:
             raise TypeError(f"Sólo válidos int o float, no {type(v)}.")
         st.session_state[k] = st.session_state.get(k, 0) + v
 
-def show_error(msg:str, progress_bar=None) -> None:
+def show_error(msg:str, progress_bar:delta_generator.DeltaGenerator=None) -> None:
     """Función que realiza 4 cosas:
-    muestra mensaje de error
-    vacía la barra de progreso si hay
-    muestra el footer de la app
-    para la ejecución de la appa
+    - muestra mensaje de error
+    - vacía la barra de progreso si hay
+    - muestra el footer de la app
+    - para la ejecución de la app
 
     Parameters
     ----------
@@ -156,7 +161,7 @@ def main():
     # Titulo
     texto("TrueForm Translator", font_family='Rubik Doodle Shadow', font_size=60, centrar=True)
     # Descripción
-    texto("Traduce tus documentos Word a un idioma de tu elección.", font_family='Dancing Script', centrar=True)
+    texto("Traduce tus propios documentos Word a un idioma de tu elección.", font_family='Dancing Script', centrar=True)
     añadir_salto()
     # inputs
     col1, col2 = st.columns(2)
@@ -171,8 +176,8 @@ def main():
         texto("Introduce tu clave", font_family='Dancing Script', font_size=20, centrar=True)
         clave = st.text_input("clave", label_visibility="hidden", help="Tu clave personal dada por el administrador.")
     añadir_salto()
-    texto("Marca la especialización de tu documento", font_family='Dancing Script', font_size=20, centrar=True)
-    especializacion = st.selectbox("especializacion", 
+    texto("Especifica el contexto de tu documento", font_family='Dancing Script', font_size=20, centrar=True)
+    contexto = st.selectbox("especializacion", 
                                 options=LISTA_ESPECIALIDADES, 
                                 label_visibility="hidden",
                                 index=0)
@@ -201,17 +206,20 @@ def main():
         # Sacamos el tema del documento
         preprocess_bar.progress(0.9, 'Identificando la temática del documento...')
         topic:TopicResponse = get_topic(text, idioma_es, documento.name)
+        preprocess_bar.progress(0.95, 'Estimando costes...')
+        estimated_cost = estimate_openai_cost(num_words)
+        time.sleep(t_wait)
         # Guardamos todo en sesión
         preprocess_bar.progress(1, 'Guardando en sesión...')
         # Creamos el DataFrame sobre el que trabajaremos
         #doc_df = pd.DataFrame(element_list, columns=['element', 'text'])
         # TODO parece que hay errores a la hora de convertir a df
         save_in_session(['text', 'elements_list', 'idioma_es', 'idioma_en', 'tematica',
-                            'num_words'], 
+                            'num_words', 'estimated_cost'], 
                         [text, element_list, idioma_es, idioma_en, topic.response,
-                            num_words])
+                            num_words, estimated_cost])
         # Acumulamos los costes
-        accumulate_in_session(['total_cost'], [topic.total_cost])
+        accumulate_in_session(['real_total_cost'], [topic.total_cost])
         time.sleep(t_wait)
         preprocess_bar.empty()
         # Activamos la flag para indicar que se ha cargado archivo correctamente
@@ -224,6 +232,7 @@ def main():
         # Creamos la barra de progreso
         validation_bar = st.progress(0)
         t_wait = 0.2
+
         # VALIDACIONES
         # Verificar que el idioma destino != idioma del documento
         validation_bar.progress(0.16, 'Verificando idiomas...')
@@ -243,18 +252,44 @@ def main():
         # Verificar si apikey de admin
         validation_bar.progress(0.16, 'Verificando clave...')
         time.sleep(t_wait)
-        if not apikey_is_admin(clave, db_handler):
-            # Mostramos nombre del usuario
-            user_name = db_handler.get_nombre(clave)
-            st.info(f'Accediendo a la clave de {user_name}.')
+        # Mostramos nombre del usuario
+        user_name = db_handler.get_nombre(clave)
+        texto(f"Accediendo a la clave de {user_name}", font_family='Dancing Script', font_size=20, centrar=True)
+        if not apikey_is_admin(clave, db_handler):            
             # Verificar si usuario activo
             validation_bar.progress(0.16, 'Verificando usuario activo...')
             time.sleep(t_wait)
             if not apikey_is_active(clave, db_handler):
                 show_error("Tu clase no está activada. Contacta con el administrador.", validation_bar)
-            # TODO Verificar si usuario palabras consumidas + palabras del documento < palabras contratadas
+            # Verificar si usuario palabras consumidas + palabras del documento < palabras contratadas
             validation_bar.progress(0.16, 'Verificando palabras restantes...')
             time.sleep(t_wait)
+            if not has_words_left(clave, num_words, db_handler):
+                show_error(f"Has sobrepasado tu límite de palabras a traducir: {db_handler.get_palabras_limite(clave)}")
+        # Guardamos la api key y el modelo en sesión
+        save_in_session(['openai_apikey', 'model'], [db_handler.get_api_key(clave), db_handler.get_model(clave)])
+        validation_bar.progress(1, 'Validaciones completadass')
+        time.sleep(t_wait)
+        validation_bar.empty()
+
+        # TRADUCCIONES
+        # A Partir de aqui usamos la api key
+        translation_bar = st.progress(0)
+        translation_bar.progress(0.6, 'Elaborando el prompt...')
+        # Pedir prompt a chatgpt con elementos del documento. #? En ocasiones no funciona: hacer prompt manual.
+        translation_prompt:PromptTransResponse = get_translation_prompt(
+            apikey=st.session_state.get('openai_apikey'),
+            model=st.session_state.get('model'),
+            origin_lang=st.session_state['idioma_es'],
+            destiny_lang=idioma,
+            doc_context=contexto,
+            doc_features=st.session_state.get('tematica'),
+            num_words=st.session_state.get('num_words'))
+        # Guardamos en sesiòn
+        translation_bar.progress(0.4, 'Guardando en sesión y actualizando costes...')
+        save_in_session(['translation_prompt'], [translation_prompt.response])
+        accumulate_in_session(['real_total_cost'], [translation_prompt.total_cost])
+        time.sleep(t_wait)
 
 
     st.session_state

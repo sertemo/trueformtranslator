@@ -143,10 +143,10 @@ def get_topic(corpus:str, language:str, doc_name:str) -> TopicResponse:
 
     Returns
     -------
-    namedtuple[str]
-        respuesta, coste
+    TopicResponse
+        (respuesta, coste)
     """
-    # Lo primero es crear un dataset. Spliteamos por salto de linea
+    # Lo primero es crear un 'dataset'. Spliteamos por salto de linea
     dataset = corpus.split('\n')
     # Sacamos dos chunk de todo el documento para enviar a openai
     #? No sería mejor sacar 3 chunks uno del principio otro del medio y otro del final de documento ?

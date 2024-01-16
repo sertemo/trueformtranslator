@@ -24,7 +24,7 @@ from passlib.context import CryptContext
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
 
-from .utils import get_datetime_formatted
+from backend.utils import get_datetime_formatted
 
 DEFAULT_DB = 'TrueFormTranslator'
 HASH_SCHEMA = CryptContext(schemes=["bcrypt"], deprecated= "auto")
@@ -64,13 +64,13 @@ class UsuarioDB(BaseModel):
     telefono:str
     clave:str
     apikey:str
+    model:str = 'gpt-3.5-turbo'
     fecha_alta:str = Field(default_factory=get_datetime_formatted)
     activo:bool = True
     admin:bool = False
     palabras_limite:int
     palabras_actual:int = 0
     ultimo_uso:str
-    ultimo_modelo:str
     facturado_accumulado:float
     coste_acumulado:float = 0
 
@@ -101,7 +101,7 @@ class DBHandler(Sequence):
         return documents[idx]
     
     def insert(self, document:Any) -> None:
-        self.db[self.collection].insert_one(document.dict(by_alias=True))
+        self.db[self.collection].insert_one(document.model_dump())
 
     def find_one(self, campo_buscado:str, valor_buscado:Any) -> dict:
         """Devuelve un dict con todos los campos del valor buscado
@@ -167,7 +167,7 @@ class UserDBHandler(DBHandler):
     
     def get_name(self, clave:str) -> str:
         user_dict = self.conn.find_one({"clave": clave})
-        return user_dict.get("nombre") 
+        return user_dict.get("nombre")
 
     
     def get_email(self, clave:str) -> str:
@@ -187,16 +187,35 @@ class UserDBHandler(DBHandler):
     
     def get_palabras_limite(self, clave:str) -> int:
         user_dict:dict = self.conn.find_one({"clave": clave})
-        return user_dict.get("palabras_limite")
+        return user_dict.get("palabras_limite") if user_dict is not None else 0
     
 
     def get_palabras_actual(self, clave:str) -> int:
         user_dict:dict = self.conn.find_one({"clave": clave})
         return user_dict.get("get_palabras_actual")
     
+    
     def get_nombre(self, clave:str) -> int:
         user_dict:dict = self.conn.find_one({"clave": clave})
         return user_dict.get("nombre")
+    
+    def get_model(self, clave:str) -> int:
+        user_dict:dict = self.conn.find_one({"clave": clave})
+        return user_dict.get("model")
 
+if __name__ == '__main__':
+    # Para crear el primer documento
+    admin = UsuarioDB(
+        nombre='Sergio Tejedor',
+        email='',
+        telefono='',
+        clave='',
+        apikey='',
+        admin=True,
+        palabras_limite=0,
+        ultimo_uso="",
+        facturado_accumulado=0,        
+    )
+    UserDBHandler('usuarios').insert(admin)
 
 

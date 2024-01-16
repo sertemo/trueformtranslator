@@ -22,6 +22,7 @@ from langchain_core.runnables.base import RunnableSequence
 from langchain_openai import ChatOpenAI
 import os
 
+OPENAI_API_KEY_ADMIN = os.environ['OPENAI_API_KEY']
 
 def get_llm(temperature:float, api_key:str, model:str='gpt-3.5-turbo') -> ChatOpenAI:
     """Devuelve un objeto ChatOpenAi de langchain con los parametros
@@ -54,27 +55,62 @@ def get_topic_chain() -> RunnableSequence:
     RunnableSequence
         La chain para invocar
     """
-    prompt_traduccion = ChatPromptTemplate.from_template('''
-    Eres un excelente identificador de documentos a partir de sus extractos.
-    Se te van a pasar dos extractos en {idioma} que pertenecen a un mismo documento llamado {nombre_documento}.
-    Tu misión es obtener información del documento al que pertenecen esos extractos.
-    Responde en español.
-    Responde solo con los detalles del tipo de documento al que pertenece el extracto.
-    Responde breve.
+    prompt_traduccion = ChatPromptTemplate.from_template(
+        '''
+        Eres un excelente identificador de documentos a partir de sus extractos.
+        Se te van a pasar dos extractos en {idioma} que pertenecen a un mismo documento llamado {nombre_documento}.
+        Tu misión es obtener información del documento al que pertenecen esos extractos.
+        Responde en español.
+        Responde solo con los detalles del tipo de documento al que pertenece el extracto.
+        Responde breve.
 
-    EXTRACTO 1:
-    {extracto_1}
+        EXTRACTO 1:
+        {extracto_1}
 
-    EXTRACTO 2:
-    {extracto_2}
+        EXTRACTO 2:
+        {extracto_2}
 
-    TU RESPUESTA:
-    '''
-    )
-    llm = get_llm(0.3, os.environ['OPENAI_API_KEY'])
+        TU RESPUESTA:
+        El documento en cuestión es
+        '''
+        )
+    llm = get_llm(0.3, OPENAI_API_KEY_ADMIN)
 
     chain = (
         prompt_traduccion
+        | llm
+        | StrOutputParser()
+    )
+    return chain
+
+def get_translation_prompt_chain(apikey:str, model:str) -> RunnableSequence:
+    """Crea la chain para pedir un prompt a chatgpt
+
+    Returns
+    -------
+    RunnableSequence
+        _description_
+    """
+    prompt_translation_prompt = ChatPromptTemplate.from_template(
+        '''
+        Eres un excelente creador de prompts para ChatGPT.
+        Tu misión es crear el mejor prompt efectivo para traducir un documento Word del {idioma_origen} al {idioma_destino}.                                            
+        Estas son algunas características importante que debes considerar:
+            - El contexto o temática del documento es: {doc_context}.
+            - Algunas características adicionales del documento o alguno de sus extractos: {doc_features}.
+            - El documento tiene {num_palabras} palabras.
+            - Los elementos a traducir del documento se pasarán en forma de frases, párrafos o palabras sueltas.
+        
+        Responde solo con el prompt, nada más.
+
+        TU PROMPT:
+        Traduce
+        '''
+        )
+    llm = get_llm(0.1, apikey, model)
+
+    chain = (
+        prompt_translation_prompt
         | llm
         | StrOutputParser()
     )

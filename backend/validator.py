@@ -55,6 +55,40 @@ def apikey_is_admin(clave:str, handler:UserDBHandler) -> bool:
     return False
 
 def apikey_is_active(clave:str, handler:UserDBHandler) -> bool:
+    """True si la clave está activa
+
+    Parameters
+    ----------
+    clave : str
+        _description_
+    handler : UserDBHandler
+        _description_
+
+    Returns
+    -------
+    bool
+        _description_
+    """
     if handler.get_activo(clave):
         return True
     return False
+
+def has_words_left(clave:str, document_words:int, handler:UserDBHandler) -> bool:
+    """Devuelve True si el usuario no supera el límite de palabras contratadas
+    teniendo en cuenta las palabras del documento actual
+
+    Parameters
+    ----------
+    clave : str
+        _description_
+    handler : UserDBHandler
+        _description_
+
+    Returns
+    -------
+    bool
+        _description_
+    """
+    limite = handler.get_palabras_limite(clave)
+    palabras_hasta_ahora = handler.get_palabras_actual(clave)
+    return palabras_hasta_ahora + document_words < limite
