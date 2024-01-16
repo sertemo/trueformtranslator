@@ -141,18 +141,32 @@ class DBHandler(Sequence):
             return None
         return search_dict[campo_a_retornar] 
 
-    def update(self, busqueda:str, valor_buscado:str, diccionario_modificaciones:dict):
+    def update(self, busqueda:str, valor_buscado:str, diccionario_modificaciones:dict) -> None:
         assert isinstance(diccionario_modificaciones, dict), f"{diccionario_modificaciones} tiene que ser un diccionario."
         filtro = {busqueda: valor_buscado}
         valores_nuevos = {"$set": diccionario_modificaciones}
         self.db[self.collection].update_one(filtro, valores_nuevos)
     
-    def delete_one(self, busqueda:str, valor_buscado:Any):
+    def delete_one(self, busqueda:str, valor_buscado:Any) -> None:
         filtro = {busqueda: valor_buscado}
         self.db[self.collection].delete_one(filtro)
 
-    def increment_one(self):
-        pass
+    def increment_number(self, campo:str, valor:str, campo_a_incrementar:str, incremento:int|float) -> None:
+        """_summary_
+
+        Parameters
+        ----------
+        campo : str
+            campo por el que buscar el documento
+        valor : str
+            valor que debe tener el documento buscado
+        campo_a_incrementar : str
+            Que campo queremos incrementar en 1
+        """
+        self.db[self.collection].update_one(
+        {campo : valor}, 
+        {"$inc" : {campo_a_incrementar : incremento}}
+        )
 
 class UserDBHandler(DBHandler):
     def __init__(self, collection:str, database:str=DEFAULT_DB) -> None:
@@ -216,6 +230,6 @@ if __name__ == '__main__':
         ultimo_uso="",
         facturado_accumulado=0,        
     )
-    UserDBHandler('usuarios').insert(admin)
+    # UserDBHandler('usuarios').insert(admin)
 
 

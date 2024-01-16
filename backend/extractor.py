@@ -29,7 +29,7 @@ from textblob import TextBlob
 import xml.etree.ElementTree as ET
 
 from .chains import get_topic_chain
-from .utils import get_chunk
+from .utils import get_chunk, clean_word
 
 # Constantes
 XML_FOLDER = Path('backend/docx_xml')
@@ -127,6 +127,22 @@ def get_num_words(corpus:str) -> int:
         _description_
     """
     return len(corpus.split())
+
+def get_vocabulary(corpus:str) -> set:
+    """Devuelve un set con todas las palabras diferentes del corpus.
+
+    Parameters
+    ----------
+    corpus : str
+        _description_
+
+    Returns
+    -------
+    set
+        _description_
+    """
+    vocab = set(corpus.split())
+    return set(map(clean_word, vocab))
 
 def get_topic(corpus:str, language:str, doc_name:str) -> TopicResponse:
     """Dado un corpus en formato string y un idioma,

@@ -19,6 +19,8 @@ Script con funciones auxiliares para el backend
 from datetime import datetime
 import pytz
 import random
+import re
+import string
 from typing import Literal
 
 PRICING_PER_TOKEN = {
@@ -28,6 +30,24 @@ PRICING_PER_TOKEN = {
     "gpt-4-32k": 0.12e-3, # 32K de contexto
     "gpt-4": 0.06e-3, 
 }
+
+def clean_word(texto:str) -> str:
+    """quita los signos de puntuación de la palabra
+
+    Parameters
+    ----------
+    texto : str
+        _description_
+
+    Returns
+    -------
+    bool
+        _description_
+    """
+    # Crear una tabla de traducción que mapea cada carácter de puntuación a None
+    tabla_traduccion = str.maketrans('', '', string.punctuation + '“”')
+    # Usar la tabla de traducción para eliminar los signos de puntuación del texto
+    return texto.translate(tabla_traduccion)
 
 def get_chunk(dataset:list[str], num_samples:int=5) -> str:
     """Dado una lista con frases de un documento, devuelve

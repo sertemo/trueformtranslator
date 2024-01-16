@@ -33,6 +33,7 @@ from backend.extractor import (extract_xml,
                                 get_language,
                                 get_topic,
                                 get_num_words,
+                                get_vocabulary,
                                 TopicResponse,
                                 )
 from backend.translator import (translate,
@@ -42,7 +43,7 @@ from backend.validator import (exists_apikey,
                                 apikey_is_active,
                                 has_words_left,
                                 are_special_char)
-from backend.utils import estimate_openai_cost
+from backend.utils import estimate_openai_cost, get_datetime_formatted
 from streamlit_utils import texto, añadir_salto, imagen_con_enlace, footer
 
 
@@ -78,26 +79,28 @@ def init() -> None:
     """
     if st.session_state.get("parsed_document") is None:
         st.session_state["parsed_document"] = False
-        if st.session_state.get('diccionary') is None:
-            st.session_state['diccionary'] = {}
+    if st.session_state.get('diccionary') is None:
+        st.session_state['diccionary'] = {}
+    if st.session_state.get('translated_document') is None:
+        st.session_state['translated_document'] = False
 
-def deactivate_flag() -> None:
-    """desactiva la flag 'parsed_document' dando a entender que se ha parseado
-    un documento, es decir que se ha cargado en el uploader
+def deactivate_flags(flags:list[str]) -> None:
+    """desactiva las flags pasadas haciéndola False
     """
-    st.session_state['parsed_document'] = False
+    for flag in flags:
+        st.session_state[flag] = False
 
-def activate_flag() -> None:
-    """desactiva la flag 'parsed_document' dando a entender que se ha parseado
-    un documento, es decir que se ha cargado en el uploader
+def activate_flags(flags:list[str]) -> None:
+    """activa las flags pasadas poniéndola True
     """
-    st.session_state['parsed_document'] = True
+    for flag in flags:
+        st.session_state[flag] = True
 
 def reset_all() -> None:
-    """Desactiva la flag y borra la ruta xml completa
+    """Desactiva todas las flags y borra la ruta xml completa
     Borra toda la sesión
     """
-    deactivate_flag()
+    deactivate_flags(['parsed_document', 'translated_document'])
     delete_xml_path()
     st.session_state.clear()
 
@@ -207,8 +210,8 @@ def translation_loop(
         
     progress_bar.empty()
 
-#TODO Crear flag de "traducido" true o false como parsed_document y no dejar traducir si ya se ha traducido
-def main():
+# MAIN FUNCTION
+def main() -> None:
     # Configuración de la app
     st.set_page_config(
     page_title=f"TrueForm Translator",
@@ -236,7 +239,6 @@ def main():
                             label_visibility="hidden",
                             index=1)
     with col2:
-        # KEY de OpenAI
         texto("Introduce tu clave", font_family='Dancing Script', font_size=20, centrar=True)
         clave = st.text_input("clave", label_visibility="hidden", help="Tu clave personal dada por el administrador.")
     añadir_salto()
@@ -262,6 +264,7 @@ def main():
         preprocess_bar.progress(0.5, 'Extrayendo los textos...')
         text, xml_elements_list = get_text_elements()
         num_words = get_num_words(text)
+        vocabulary = get_vocabulary(text)
         time.sleep(t_wait)     
         # Sacamos el idioma del texto
         preprocess_bar.progress(0.75, 'Identificando el idioma del documento...')
@@ -276,15 +279,15 @@ def main():
         # Guardamos todo en sesión
         preprocess_bar.progress(1, 'Guardando en sesión...')
         save_in_session(['text', 'xml_elements_list', 'idioma_es', 'idioma_en', 'tematica',
-                            'num_words', 'estimated_cost'], 
+                            'num_words', 'estimated_cost', 'vocabulary', 'vocab_size'], 
                         [text, xml_elements_list, idioma_es, idioma_en, topic.response,
-                            num_words, estimated_cost])
+                            num_words, estimated_cost, vocabulary, len(vocabulary)])
         # Acumulamos los costes
         accumulate_in_session(['real_total_cost'], [topic.total_cost])
         time.sleep(t_wait)
         preprocess_bar.empty()
         # Activamos la flag para indicar que se ha cargado archivo correctamente
-        activate_flag()
+        activate_flags(['parsed_document'])
         # Escribimos el número de palabras al usuario
     if st.session_state.get('num_words') is not None:
         texto(f"Tu documento tiene {st.session_state['num_words']} palabras", font_family='Dancing Script', font_size=20, centrar=True)
@@ -292,7 +295,7 @@ def main():
     añadir_salto()
     # Botón para traducir
     traducir = st.button(label="Traducir", use_container_width=True)
-    if traducir and st.session_state.get('parsed_document'):
+    if traducir and st.session_state.get('parsed_document') and not st.session_state.get('translated_document'):
         # Creamos la barra de progreso
         validation_bar = st.progress(0)
         t_wait = 0.2
@@ -354,9 +357,20 @@ def main():
             })
         except Exception as exc:
             show_error(f"Ha ocurrido un error: {exc}", translation_bar)
-        # TODO Visualizar tiempo transcurrido
-        texto('Traducción finalizada.', font_family='Dancing Script', font_size=20, centrar=True)
-        # TODO Actualizar en db si todo ha salido bien el número de palabras del usuario y el coste.
+        # Activamos la flag de traducción
+        activate_flags(['translated_document'])
+        # Visualizar tiempo transcurrido
+        minutos = (time.perf_counter() - start) // 60
+        segundos = (time.perf_counter() - start) % 60
+        texto(f'Traducción finalizada. Tiempo transcurrido: {minutos:.0f} minutos y {segundos:.0f} segundos.', 
+                font_family='Dancing Script', 
+                font_size=20, 
+                centrar=True)
+        # Actualiza la fecha actual
+        db_handler.update('clave', clave, {'ultimo_uso': get_datetime_formatted(),})
+        # Incrementamos en db las palabras traducidas y el coste
+        db_handler.increment_number('clave', clave, 'palabras_actual', st.session_state['num_words'])
+        db_handler.increment_number('clave', clave, 'coste_acumulado', st.session_state['real_total_cost'])
         # TODO Mostrar botón para descargar el archivo traducido.
 
     st.session_state

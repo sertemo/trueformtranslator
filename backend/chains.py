@@ -82,7 +82,7 @@ def get_topic_chain() -> RunnableSequence:
         | StrOutputParser()
     )
     return chain
-
+# TODO insertar 'memoria' pasandole los textos anteriores y los posteriores ?
 def get_translation_chain(apikey:str, model:str) -> RunnableSequence:
     """Devuelve la chain para la traducción de los textos.
 
@@ -122,7 +122,7 @@ def get_translation_chain(apikey:str, model:str) -> RunnableSequence:
     )
     return chain
 
-def get_translation_prompt_chain(apikey:str, model:str) -> RunnableSequence:
+def get_translation_prompt_chain(apikey:str, model:str) -> RunnableSequence: #! Deprecated    
     """Crea la chain para pedir un prompt a chatgpt
 
     Returns

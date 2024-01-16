@@ -109,7 +109,7 @@ def are_special_char(texto:str) -> bool:
         _description_
     """
 # Crear una expresión regular que incluya todos los caracteres especiales y de puntuación
-    caracteres_especiales = re.escape(string.punctuation)
+    caracteres_especiales = re.escape(string.punctuation + '“”')
     # Comprobar si todos los caracteres en la palabra coinciden con la expresión regular
     return re.fullmatch("[" + caracteres_especiales + "]+", texto) is not None
 
