@@ -84,7 +84,7 @@ def get_text_elements() -> tuple[str, list]:
         para_text = []
         for text_elem in paragraph.iterfind('.//w:t', namespaces):
             para_text.append(text_elem.text) # Almacenamos aqui solo el texto para usarlo para sacar idioma o temática
-            text_elements.append((text_elem, text_elem.text))
+            text_elements.append({'xml_element': text_elem, 'text': text_elem.text})
         texto += "\n" + "".join(para_text)
     return texto, text_elements
 

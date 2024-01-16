@@ -27,7 +27,7 @@ Características que quiero incorporar:
 - [x] Realizar la lógica con DB.
 - [x] Pedir prompt a chatgpt con idioma, contexto y temáticas para la traducción.
 - [x] Realizar validaciones.
-- [] Crear el DataFrame
+- [-] Crear el DataFrame NO. Al final utilizo dicts.
 - [] Mapear los textos y realizar las traducciones.
 - [] Modificar cada elemento con su texto traducido.
 - [] Guardar el archivo xml sustituyendo el anterior.

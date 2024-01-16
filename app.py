@@ -17,6 +17,8 @@
 # librerías internas
 from functools import partial
 from io import BytesIO
+import random
+import re
 import time
 # librerías de terceros
 from dotenv import load_dotenv
@@ -33,12 +35,13 @@ from backend.extractor import (extract_xml,
                                 get_num_words,
                                 TopicResponse,
                                 )
-from backend.translator import (get_translation_prompt,
-                                PromptTransResponse)
+from backend.translator import (translate,
+                                TranslationResponse)
 from backend.validator import (exists_apikey, 
                                 apikey_is_admin,
                                 apikey_is_active,
-                                has_words_left)
+                                has_words_left,
+                                are_special_char)
 from backend.utils import estimate_openai_cost
 from streamlit_utils import texto, añadir_salto, imagen_con_enlace, footer
 
@@ -55,10 +58,11 @@ LISTA_ESPECIALIDADES = [
     'Aplicaciones y móvil',
     'Belleza, Moda Cosmética',
     'Empresa y finanzas',
+    'Filosófico',
     'Legal',
     'Fabricación e ingeniería',
     'Marketing SEO, publicidad',
-    'Médica',
+    'Médico',
     'Novela',
     'Tecnología y Software',
     'Videojuegos',
@@ -74,6 +78,8 @@ def init() -> None:
     """
     if st.session_state.get("parsed_document") is None:
         st.session_state["parsed_document"] = False
+        if st.session_state.get('diccionary') is None:
+            st.session_state['diccionary'] = {}
 
 def deactivate_flag() -> None:
     """desactiva la flag 'parsed_document' dando a entender que se ha parseado
@@ -147,7 +153,61 @@ def show_error(msg:str, progress_bar:delta_generator.DeltaGenerator=None) -> Non
         progress_bar.empty()
     st.stop()
 
+def wait_randomly(max:int=1):
+    """max es en 
 
+    Parameters
+    ----------
+    max : int
+        _description_
+    """
+    cooldown = round(random.random(), 1) * max
+    time.sleep(cooldown)
+
+def translation_loop(
+        *,
+        apikey:str,
+        model:str,
+        objects_list:list[dict], 
+        progress_bar:delta_generator.DeltaGenerator,
+        chain_params:dict) -> None:
+    n_elements = len(objects_list)
+    step = 1 / n_elements
+    for idx, obj in enumerate(objects_list):
+        progress_bar.progress(step * idx, f'Traduciendo {idx}/{n_elements}...')
+        # Sacamos el texto del objeto
+        texto:str = obj['text']
+        # No traducir caracteres etc.
+        if (len(texto) == 1) or texto.isspace() or texto.isdigit() or texto.isnumeric() or are_special_char(texto.strip()):
+            obj['translation'] = texto
+            continue
+        # Buscamos en el diccionario si el texto sin espacios ya ha sido traducido
+        if (transl:=st.session_state['diccionary'].get(texto.strip())) is not None:
+            obj['translation'] = transl
+            continue
+
+        # Pasamos por el traductor y sacamos traducción y coste
+        response:TranslationResponse = translate(apikey, model, text=texto, **chain_params)
+        translated_text:str = response.response
+        translation_cost:float = response.total_cost        
+        # Si es una sola palabra añadimos al diccionario quitando espacios
+        if len(texto.split()) == 1:
+            st.session_state['diccionary'][texto.strip()] = translated_text.strip()
+        # Verificamos que los espacios al principio y al final coincidan con el texto original
+        if texto[0].isspace() and (not translated_text[0].isspace()):
+            translated_text = " " + translated_text
+        if texto[-1].isspace() and (not translated_text[-1].isspace()):
+            translated_text = translated_text + " "        
+        # Actualizamos el objeto añadiendo un campo traducido y el coste en sesión
+        obj['translation'] = translated_text
+        accumulate_in_session(['real_total_cost'], [translation_cost])
+        # Cooldown aleatorio
+        if random.random() < 0.5:
+            wait_randomly(2)
+        
+    progress_bar.empty()
+
+#TODO Crear flag de "traducido" true o false como parsed_document y no dejar traducir si ya se ha traducido
 def main():
     # Configuración de la app
     st.set_page_config(
@@ -162,6 +222,10 @@ def main():
     texto("TrueForm Translator", font_family='Rubik Doodle Shadow', font_size=60, centrar=True)
     # Descripción
     texto("Traduce tus propios documentos Word a un idioma de tu elección.", font_family='Dancing Script', centrar=True)
+    # TODO Añadir indicaciones importantes:
+    # TODO Documentso words personales
+    # TODO Que no sean confidenciales
+    # TODO Escoger bien el contexto etc.
     añadir_salto()
     # inputs
     col1, col2 = st.columns(2)
@@ -177,7 +241,7 @@ def main():
         clave = st.text_input("clave", label_visibility="hidden", help="Tu clave personal dada por el administrador.")
     añadir_salto()
     texto("Especifica el contexto de tu documento", font_family='Dancing Script', font_size=20, centrar=True)
-    contexto = st.selectbox("especializacion", 
+    contexto = st.selectbox("contexto", 
                                 options=LISTA_ESPECIALIDADES, 
                                 label_visibility="hidden",
                                 index=0)
@@ -186,7 +250,7 @@ def main():
     texto("Carga tu documento Word", font_family='Dancing Script', font_size=20, centrar=True)
     documento = st.file_uploader("documento", label_visibility="hidden", type=["docx"], on_change=reset_all)
     if documento and not st.session_state.get('parsed_document'):
-        # TODO Meter toda la pipeline en una función cuando esté terminada
+        # TODO Meter todo en una pipeline ?
         # Creamos la barra de progreso
         preprocess_bar = st.progress(0)
         t_wait = 0.2
@@ -196,7 +260,7 @@ def main():
         time.sleep(t_wait)
         # Extraemos los textos del document.xml y sus elementos para poder modificar
         preprocess_bar.progress(0.5, 'Extrayendo los textos...')
-        text, element_list = get_text_elements()
+        text, xml_elements_list = get_text_elements()
         num_words = get_num_words(text)
         time.sleep(t_wait)     
         # Sacamos el idioma del texto
@@ -211,12 +275,9 @@ def main():
         time.sleep(t_wait)
         # Guardamos todo en sesión
         preprocess_bar.progress(1, 'Guardando en sesión...')
-        # Creamos el DataFrame sobre el que trabajaremos
-        #doc_df = pd.DataFrame(element_list, columns=['element', 'text'])
-        # TODO parece que hay errores a la hora de convertir a df
-        save_in_session(['text', 'elements_list', 'idioma_es', 'idioma_en', 'tematica',
+        save_in_session(['text', 'xml_elements_list', 'idioma_es', 'idioma_en', 'tematica',
                             'num_words', 'estimated_cost'], 
-                        [text, element_list, idioma_es, idioma_en, topic.response,
+                        [text, xml_elements_list, idioma_es, idioma_en, topic.response,
                             num_words, estimated_cost])
         # Acumulamos los costes
         accumulate_in_session(['real_total_cost'], [topic.total_cost])
@@ -224,6 +285,9 @@ def main():
         preprocess_bar.empty()
         # Activamos la flag para indicar que se ha cargado archivo correctamente
         activate_flag()
+        # Escribimos el número de palabras al usuario
+    if st.session_state.get('num_words') is not None:
+        texto(f"Tu documento tiene {st.session_state['num_words']} palabras", font_family='Dancing Script', font_size=20, centrar=True)
 
     añadir_salto()
     # Botón para traducir
@@ -275,22 +339,25 @@ def main():
         # TRADUCCIONES
         # A Partir de aqui usamos la api key
         translation_bar = st.progress(0)
-        translation_bar.progress(0.6, 'Elaborando el prompt...')
-        # Pedir prompt a chatgpt con elementos del documento. #? En ocasiones no funciona: hacer prompt manual.
-        translation_prompt:PromptTransResponse = get_translation_prompt(
-            apikey=st.session_state.get('openai_apikey'),
-            model=st.session_state.get('model'),
-            origin_lang=st.session_state['idioma_es'],
-            destiny_lang=idioma,
-            doc_context=contexto,
-            doc_features=st.session_state.get('tematica'),
-            num_words=st.session_state.get('num_words'))
-        # Guardamos en sesiòn
-        translation_bar.progress(0.4, 'Guardando en sesión y actualizando costes...')
-        save_in_session(['translation_prompt'], [translation_prompt.response])
-        accumulate_in_session(['real_total_cost'], [translation_prompt.total_cost])
-        time.sleep(t_wait)
-
+        start = time.perf_counter()
+        try:
+            translation_loop(
+                apikey=st.session_state.get('openai_apikey'),
+                model=st.session_state.get('model'),
+                objects_list=st.session_state['xml_elements_list'],
+                progress_bar=translation_bar,
+                chain_params={
+                'origin_lang': st.session_state['idioma_es'],
+                'destiny_lang': idioma,
+                'doc_features': st.session_state['tematica'],
+                'doc_context': contexto,
+            })
+        except Exception as exc:
+            show_error(f"Ha ocurrido un error: {exc}", translation_bar)
+        # TODO Visualizar tiempo transcurrido
+        texto('Traducción finalizada.', font_family='Dancing Script', font_size=20, centrar=True)
+        # TODO Actualizar en db si todo ha salido bien el número de palabras del usuario y el coste.
+        # TODO Mostrar botón para descargar el archivo traducido.
 
     st.session_state
 

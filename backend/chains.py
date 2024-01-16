@@ -83,6 +83,45 @@ def get_topic_chain() -> RunnableSequence:
     )
     return chain
 
+def get_translation_chain(apikey:str, model:str) -> RunnableSequence:
+    """Devuelve la chain para la traducción de los textos.
+
+    Parameters
+    ----------
+    apikey : str
+        _description_
+    model : str
+        _description_
+
+    Returns
+    -------
+    RunnableSequence
+        _description_
+    """
+    prompt = ChatPromptTemplate.from_template(
+        '''
+        Eres un experto traductor de documentos.
+        Tu misión es traducir un documento del {idioma_origen} al {idioma_destino}.
+        El documento es {tematica} de tipo {contexto}.
+        Los textos del documento a traducir serán en forma de palabras, frases o párrafos.
+        Respeta el formato del texto en la traducción. Ejemplo de Español a Francés:
+        TEXTO: ' dónde hacía calor, '
+        TRADUCCIÓN: ' où il faisait chaud, '
+
+        Responde solo con la traducción en {idioma_destino}.
+
+        TEXTO: {texto}
+        TRADUCCIÓN:
+        ''')
+    llm = get_llm(0.1, api_key=apikey, model=model)
+
+    chain = (
+        prompt
+        | llm
+        | StrOutputParser()
+    )
+    return chain
+
 def get_translation_prompt_chain(apikey:str, model:str) -> RunnableSequence:
     """Crea la chain para pedir un prompt a chatgpt
 

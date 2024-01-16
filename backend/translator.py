@@ -17,12 +17,61 @@
 from collections import namedtuple
 
 from langchain_community.callbacks import get_openai_callback
+from streamlit import delta_generator
 
-from .chains import get_translation_prompt_chain
+from .chains import get_translation_prompt_chain, get_translation_chain
 
 # Objetos
 # Objetos
 PromptTransResponse = namedtuple('PromptTransResponse', ['response', 'total_cost'])
+TranslationResponse = namedtuple('TranslationResponse', ['response', 'total_cost'])
+
+def translate(
+        apikey:str,
+        model:str,
+        origin_lang:str,
+        destiny_lang:str,
+        doc_context:str,
+        doc_features:str,
+        text:str,
+        ) -> TranslationResponse:
+    """Ejecuta la chain de traducción y devuelve un objeto
+    TranslationResponse con (texto traducido, coste)
+
+    Parameters
+    ----------
+    apikey : str
+        _description_
+    model : str
+        _description_
+    origin_lang : str
+        _description_
+    destiny_lang : str
+        _description_
+    doc_context : str
+        _description_
+    doc_features : str
+        _description_
+    text : str
+        _description_
+
+    Returns
+    -------
+    TranslationResponse
+        _description_
+    """
+    # Obtenemos la chain
+    chain = get_translation_chain(apikey, model)
+    with get_openai_callback() as cb:
+        response = chain.invoke({
+            'idioma_origen': origin_lang,
+            'idioma_destino': destiny_lang,
+            'tematica': doc_features,
+            'contexto': doc_context,
+            'texto': text,
+        })
+        coste_total = cb.total_cost
+    return TranslationResponse(response, coste_total)
 
 def get_translation_prompt(
         apikey:str,

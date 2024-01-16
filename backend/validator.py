@@ -13,6 +13,8 @@
 # limitations under the License.
 
 # Script con el código relacionado con funciones de validación
+import re
+import string
 
 from .db import UserDBHandler
 
@@ -92,3 +94,22 @@ def has_words_left(clave:str, document_words:int, handler:UserDBHandler) -> bool
     limite = handler.get_palabras_limite(clave)
     palabras_hasta_ahora = handler.get_palabras_actual(clave)
     return palabras_hasta_ahora + document_words < limite
+
+def are_special_char(texto:str) -> bool:
+    """True si el texto pasado son todo caracteres especial o de puntuación
+
+    Parameters
+    ----------
+    texto : str
+        _description_
+
+    Returns
+    -------
+    bool
+        _description_
+    """
+# Crear una expresión regular que incluya todos los caracteres especiales y de puntuación
+    caracteres_especiales = re.escape(string.punctuation)
+    # Comprobar si todos los caracteres en la palabra coinciden con la expresión regular
+    return re.fullmatch("[" + caracteres_especiales + "]+", texto) is not None
+
