@@ -24,6 +24,7 @@ font_dict = {
     'Dancing Script': 'https://fonts.googleapis.com/css2?family=Dancing+Script&display=swap'
 }
 
+
 def texto(texto:str, /, *, 
         font_size:int=30, 
         color:str=DEFAULT_COLOR, 

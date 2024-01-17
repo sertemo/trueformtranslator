@@ -16,6 +16,7 @@
 # y modelos de base de datos
 
 from collections.abc import Sequence
+import json
 import os
 from typing import Any, Union
 
@@ -67,12 +68,14 @@ class UsuarioDB(BaseModel):
     model:str = 'gpt-3.5-turbo'
     fecha_alta:str = Field(default_factory=get_datetime_formatted)
     activo:bool = True
-    admin:bool = False
-    palabras_limite:int
-    palabras_actual:int = 0
-    ultimo_uso:str
-    facturado_accumulado:float
-    coste_acumulado:float = 0
+    admin:bool = False       
+    ultimo_uso:str = '' # fecha de última traducciójn
+    ultimo_coste:float = 0 # coste de la última traducción
+    ultimo_palabras:int = 0 # palabras del ultimo documento traducido
+    palabras_limite:int # num max de palabras contratadas
+    palabras_acumulado:int = 0 # palabras traducidas hasta la fecha
+    facturado_accumulado:float # importe facturado hasta la fecha a este usuario
+    coste_acumulado:float = 0 # coste acumulado hasta la fecha por este usuario
 
 class DBHandler(Sequence):
     def __init__(self, collection:str, database:str=DEFAULT_DB) -> None:
@@ -218,18 +221,9 @@ class UserDBHandler(DBHandler):
         return user_dict.get("model")
 
 if __name__ == '__main__':
-    # Para crear el primer documento
-    admin = UsuarioDB(
-        nombre='Sergio Tejedor',
-        email='',
-        telefono='',
-        clave='',
-        apikey='',
-        admin=True,
-        palabras_limite=0,
-        ultimo_uso="",
-        facturado_accumulado=0,        
-    )
-    # UserDBHandler('usuarios').insert(admin)
+    response = UserDBHandler('usuarios').find_one('nombre', 'Sergio Tejedor')
+    # Quitamos el _id
+    del response['_id']
+    print(json.dumps(response, indent=3))
 
 

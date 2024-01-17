@@ -108,6 +108,8 @@ def get_translation_chain(apikey:str, model:str) -> RunnableSequence:
         TEXTO: ' dónde hacía calor, '
         TRADUCCIÓN: ' où il faisait chaud, '
 
+        Traduce solo los textos en {idioma_origen}.
+        No traduzcas nombres propios.
         Responde solo con la traducción en {idioma_destino}.
 
         TEXTO: {texto}

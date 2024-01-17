@@ -18,7 +18,6 @@
 from functools import partial
 from io import BytesIO
 import random
-import re
 import time
 # librerías de terceros
 from dotenv import load_dotenv
@@ -72,6 +71,11 @@ LISTA_ESPECIALIDADES = [
 db_handler = UserDBHandler('usuarios')
 # instancia footer con argumentos fijos
 put_footer = partial(footer, 2024, True)
+# Instanciamos distintos tipos de mensajes
+texto_error = partial(texto, font_family='Dancing Script', font_size=20, centrar=True, color='#FF0033')
+texto_descriptivo = partial(texto, font_family='Dancing Script', font_size=20, centrar=True)
+texto_titulo = partial(texto, font_family='Rubik Doodle Shadow', font_size=60, centrar=True)
+texto_subtitulo = partial(texto, font_family='Dancing Script', centrar=True)
 
 # Funciones
 def init() -> None:
@@ -150,7 +154,7 @@ def show_error(msg:str, progress_bar:delta_generator.DeltaGenerator=None) -> Non
     progress_bar : _type_
         _description_
     """
-    st.error(msg, icon='🛑')
+    texto_error(msg)
     put_footer()
     if progress_bar is not None:
         progress_bar.empty()
@@ -222,9 +226,9 @@ def main() -> None:
     # inicializamos session state
     init()
     # Titulo
-    texto("TrueForm Translator", font_family='Rubik Doodle Shadow', font_size=60, centrar=True)
+    texto_titulo("TrueForm Translator")
     # Descripción
-    texto("Traduce tus propios documentos Word a un idioma de tu elección.", font_family='Dancing Script', centrar=True)
+    texto_subtitulo("Traduce tus propios documentos Word a un idioma de tu elección.")
     # TODO Añadir indicaciones importantes:
     # TODO Documentso words personales
     # TODO Que no sean confidenciales
@@ -239,17 +243,17 @@ def main() -> None:
                             label_visibility="hidden",
                             index=1)
     with col2:
-        texto("Introduce tu clave", font_family='Dancing Script', font_size=20, centrar=True)
+        texto_descriptivo("Introduce tu clave")
         clave = st.text_input("clave", label_visibility="hidden", help="Tu clave personal dada por el administrador.")
     añadir_salto()
-    texto("Especifica el contexto de tu documento", font_family='Dancing Script', font_size=20, centrar=True)
+    texto_descriptivo("Especifica el contexto de tu documento")
     contexto = st.selectbox("contexto", 
                                 options=LISTA_ESPECIALIDADES, 
                                 label_visibility="hidden",
                                 index=0)
     añadir_salto()
-    # Cargar el documento
-    texto("Carga tu documento Word", font_family='Dancing Script', font_size=20, centrar=True)
+    # EXTRACCIONES
+    texto_descriptivo("Carga tu documento Word")
     documento = st.file_uploader("documento", label_visibility="hidden", type=["docx"], on_change=reset_all)
     if documento and not st.session_state.get('parsed_document'):
         # TODO Meter todo en una pipeline ?
@@ -290,7 +294,7 @@ def main() -> None:
         activate_flags(['parsed_document'])
         # Escribimos el número de palabras al usuario
     if st.session_state.get('num_words') is not None:
-        texto(f"Tu documento tiene {st.session_state['num_words']} palabras", font_family='Dancing Script', font_size=20, centrar=True)
+        texto_descriptivo(f"Tu documento tiene {st.session_state['num_words']} palabras")
 
     añadir_salto()
     # Botón para traducir
@@ -321,7 +325,7 @@ def main() -> None:
         time.sleep(t_wait)
         # Mostramos nombre del usuario
         user_name = db_handler.get_nombre(clave)
-        texto(f"Accediendo a la clave de {user_name}", font_family='Dancing Script', font_size=20, centrar=True)
+        texto_descriptivo(f"Accediendo a la clave de {user_name}")
         if not apikey_is_admin(clave, db_handler):            
             # Verificar si usuario activo
             validation_bar.progress(0.16, 'Verificando usuario activo...')
@@ -362,15 +366,19 @@ def main() -> None:
         # Visualizar tiempo transcurrido
         minutos = (time.perf_counter() - start) // 60
         segundos = (time.perf_counter() - start) % 60
-        texto(f'Traducción finalizada. Tiempo transcurrido: {minutos:.0f} minutos y {segundos:.0f} segundos.', 
-                font_family='Dancing Script', 
-                font_size=20, 
-                centrar=True)
-        # Actualiza la fecha actual
-        db_handler.update('clave', clave, {'ultimo_uso': get_datetime_formatted(),})
-        # Incrementamos en db las palabras traducidas y el coste
-        db_handler.increment_number('clave', clave, 'palabras_actual', st.session_state['num_words'])
-        db_handler.increment_number('clave', clave, 'coste_acumulado', st.session_state['real_total_cost'])
+        texto_descriptivo(f'Traducción finalizada. Tiempo transcurrido: {minutos:.0f} minutos y {segundos:.0f} segundos.') 
+        try:
+            # Actualizamos la fecha actual y los campos último coste y últimas palabras
+            db_handler.update('clave', clave, {'ultimo_uso': get_datetime_formatted(),})
+            db_handler.update('clave', clave, {'ultimo_coste': st.session_state['real_total_cost']})
+            db_handler.update('clave', clave, {'ultimo_palabras': st.session_state['num_words']})
+            # Incrementamos en db las palabras traducidas y el coste
+            db_handler.increment_number('clave', clave, 'palabras_acumulado', st.session_state['num_words'])
+            db_handler.increment_number('clave', clave, 'coste_acumulado', st.session_state['real_total_cost'])
+        except Exception as exc:
+            texto_error(f'Se ha producido el siguiente error al guardar los datos: {exc}')
+        
+        # RECONTRUCCION DEL DOCUMENTO
         # TODO Mostrar botón para descargar el archivo traducido.
 
     st.session_state
