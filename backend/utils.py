@@ -17,11 +17,10 @@ Script con funciones auxiliares para el backend
     """
 
 from datetime import datetime
+import os
 import pytz
 import random
-import re
 import string
-from typing import Literal
 
 PRICING_PER_TOKEN = {
     'gpt-3.5-turbo': 0.0020e-3,
@@ -116,4 +115,22 @@ def estimate_openai_cost(num_words:int, model:str='gpt-3.5-turbo') -> float:
         raise ValueError(f"{model} no es un modelo válido.")
     tokens = convert_words_to_tokens(num_words)
     return round(tokens * PRICING_PER_TOKEN[model], 4)
-    
+
+def add_suffix_to_filename(filename_with_extension:str, suffix:str) -> str:
+    """Añade un sufijo al archivo antes de la extensión.
+    Ejemplo: 
+    - doc original: La odisea.docx
+    - doc modificado: La odisea_translated.docx
+
+    Parameters
+    ----------
+    filename_with_extension : str
+        _description_
+
+    Returns
+    -------
+    str
+        _description_
+    """
+    nombre, extension = os.path.splitext(filename_with_extension)
+    return "".join([nombre, '_', suffix, extension])

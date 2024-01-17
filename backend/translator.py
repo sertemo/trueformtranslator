@@ -17,11 +17,9 @@
 from collections import namedtuple
 
 from langchain_community.callbacks import get_openai_callback
-from streamlit import delta_generator
 
 from .chains import get_translation_prompt_chain, get_translation_chain
 
-# Objetos
 # Objetos
 PromptTransResponse = namedtuple('PromptTransResponse', ['response', 'total_cost'])
 TranslationResponse = namedtuple('TranslationResponse', ['response', 'total_cost'])

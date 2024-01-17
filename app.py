@@ -25,6 +25,7 @@ import pandas as pd
 import streamlit as st
 from streamlit import delta_generator
 # librerías del proyecto
+from backend.builder import modify_text_element, build_docx_from_xml
 from backend.db import UserDBHandler
 from backend.extractor import (extract_xml, 
                                 delete_xml_path, 
@@ -35,14 +36,20 @@ from backend.extractor import (extract_xml,
                                 get_vocabulary,
                                 TopicResponse,
                                 )
+from backend.paths import XML_FOLDER
 from backend.translator import (translate,
-                                TranslationResponse)
+                                TranslationResponse
+                                )
 from backend.validator import (exists_apikey, 
                                 apikey_is_admin,
                                 apikey_is_active,
                                 has_words_left,
-                                are_special_char)
-from backend.utils import estimate_openai_cost, get_datetime_formatted
+                                are_special_char
+                                )
+from backend.utils import (estimate_openai_cost,
+                            get_datetime_formatted,
+                            add_suffix_to_filename
+                            )
 from streamlit_utils import texto, añadir_salto, imagen_con_enlace, footer
 
 
@@ -379,7 +386,24 @@ def main() -> None:
             texto_error(f'Se ha producido el siguiente error al guardar los datos: {exc}')
         
         # RECONTRUCCION DEL DOCUMENTO
-        # TODO Mostrar botón para descargar el archivo traducido.
+    if st.session_state.get('translated_document'):        
+        # Modificamos los elementos guardados en sesión por su texto traducido
+        # TODO Seguramente esto no funcione y haya que iterar de nuevo sobre el documento xml para sacar los elementos
+        modify_text_element(st.session_state['xml_elements_list'])
+        # Generamos de nuevo el archivo Word
+        archivo_descarga = add_suffix_to_filename(documento.name, 'translated')
+        build_docx_from_xml(archivo_descarga)
+        # Mostrar botón para descargar el archivo traducido.
+        with open(archivo_descarga, "rb") as file:
+            st.download_button(
+                label = "Descargar",
+                data = file,
+                file_name = archivo_descarga,
+                mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                #on_click=update_counter, # TODO: Agregar contador de veces que se descarga archivo
+                use_container_width=True,
+                help="Descarga el documento traducido"
+            )
 
     st.session_state
 

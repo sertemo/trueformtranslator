@@ -29,11 +29,11 @@ from textblob import TextBlob
 import xml.etree.ElementTree as ET
 
 from .chains import get_topic_chain
+from .paths import XML_FOLDER, DOCUMENT_XML_PATH
 from .utils import get_chunk, clean_word
 
 # Constantes
-XML_FOLDER = Path('backend/docx_xml')
-DOCUMENT_XML_PATH = XML_FOLDER / Path('word') / 'document.xml'
+
 # Objetos
 TopicResponse = namedtuple('TopicResponse', ['response', 'total_cost'])
 
@@ -68,7 +68,7 @@ def get_text_elements() -> tuple[str, list]:
     str
         El texto del documento
     list
-        lista de tuplas con (texto, elemento)
+        lista de diccionarios con {'xml_element' y 'text'}
     """
     # Cargamos archivo document.xml donde está el texto
     tree = ET.parse(DOCUMENT_XML_PATH)
