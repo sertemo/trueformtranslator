@@ -113,3 +113,10 @@ def are_special_char(texto:str) -> bool:
     # Comprobar si todos los caracteres en la palabra coinciden con la expresión regular
     return re.fullmatch("[" + caracteres_especiales + "]+", texto) is not None
 
+# TODO
+def theres_footer() -> bool:
+    pass
+
+def theres_header() -> bool:
+    pass
+

@@ -20,7 +20,6 @@ import json
 import os
 from typing import Any, Union
 
-from dotenv import load_dotenv
 from passlib.context import CryptContext
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
@@ -29,8 +28,6 @@ from backend.utils import get_datetime_formatted
 
 DEFAULT_DB = 'TrueFormTranslator'
 HASH_SCHEMA = CryptContext(schemes=["bcrypt"], deprecated= "auto")
-
-load_dotenv()
 
 def hash_apikey(key:str) -> str:
     """Devuelve una key hasheada
@@ -207,9 +204,9 @@ class UserDBHandler(DBHandler):
         return user_dict.get("palabras_limite") if user_dict is not None else 0
     
 
-    def get_palabras_actual(self, clave:str) -> int:
+    def get_palabras_acumulado(self, clave:str) -> int:
         user_dict:dict = self.conn.find_one({"clave": clave})
-        return user_dict.get("get_palabras_actual")
+        return user_dict.get("palabras_acumulado")
     
     
     def get_nombre(self, clave:str) -> int:

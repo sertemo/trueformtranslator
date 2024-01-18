@@ -18,36 +18,36 @@ import os
 import xml.etree.ElementTree as ET
 import zipfile
 
-from .extractor import get_text_elements
+from dotenv import load_dotenv
+
 from .paths import XML_FOLDER, DOCUMENT_XML_PATH
 
+load_dotenv()
 
-def modify_text_element(session_list:list[dict]) -> None:
+# TODO Modificar esta función para que acepte también footer y header
+def modify_text_element(session_list:list[dict], tree:ET.ElementTree) -> None:
     """Modifica todos los textos de los objetos Elements susituyéndolos
-    por los textos traducidos
+    por los textos traducidos y escribe el árbol nuevo
 
     Parameters
     ----------
     elements_list : list[dict]
         _description_
     """
-    # Cargamos archivo document.xml donde está el texto
-    tree = ET.parse(DOCUMENT_XML_PATH)
-    root = tree.getroot()
-    # Espacio de nombres utilizado en el documento Word XML
-    namespaces = {
-        'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
-    }
-    # Encontrar todos los elementos de texto y cambiar el texto por el texto traducido
-    for paragraph in root.iterfind('.//w:p', namespaces):
-        for text_elem, session_element in zip(paragraph.iterfind('.//w:t', namespaces), session_list):
-            text_elem.text = session_element['translation']
+    for el_dict in session_list:
+        el_dict['xml_element'].text = el_dict['translation']
+    tree.write(DOCUMENT_XML_PATH)
 
 def build_docx_from_xml(archivo_destino:str, directorio_fuente:str=XML_FOLDER) -> None:
-    # Asegúrate de que el archivo de destino tenga la extensión .docx
-    if not archivo_destino.endswith('.docx'):
-        archivo_destino += '.docx'
+    """Crea un archivo docx a partir de su árbol de documentos xml
 
+    Parameters
+    ----------
+    archivo_destino : str
+        _description_
+    directorio_fuente : str, optional
+        _description_, by default XML_FOLDER
+    """
     # Crea un archivo zip con la opción de escritura
     with zipfile.ZipFile(archivo_destino, 'w') as docx:
         # Camina por el directorio fuente

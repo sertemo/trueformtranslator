@@ -20,7 +20,6 @@ from io import BytesIO
 import random
 import time
 # librerías de terceros
-from dotenv import load_dotenv
 import pandas as pd
 import streamlit as st
 from streamlit import delta_generator
@@ -29,14 +28,15 @@ from backend.builder import modify_text_element, build_docx_from_xml
 from backend.db import UserDBHandler
 from backend.extractor import (extract_xml, 
                                 delete_xml_path, 
-                                get_text_elements,
+                                get_text_elements_and_tree,
                                 get_language,
                                 get_topic,
                                 get_num_words,
                                 get_vocabulary,
                                 TopicResponse,
+                                TreeDocElement,
                                 )
-from backend.paths import XML_FOLDER
+from backend.paths import DOCUMENT_XML_PATH
 from backend.translator import (translate,
                                 TranslationResponse
                                 )
@@ -50,7 +50,7 @@ from backend.utils import (estimate_openai_cost,
                             get_datetime_formatted,
                             add_suffix_to_filename
                             )
-from streamlit_utils import texto, añadir_salto, imagen_con_enlace, footer
+from streamlit_utils import texto, añadir_salto, footer
 
 
 # Constantes
@@ -272,26 +272,27 @@ def main() -> None:
         extract_xml(BytesIO(documento.read()))
         time.sleep(t_wait)
         # Extraemos los textos del document.xml y sus elementos para poder modificar
+        # TODO Aqui verificar si hay header y footer y extraer sus textos
         preprocess_bar.progress(0.5, 'Extrayendo los textos...')
-        text, xml_elements_list = get_text_elements()
-        num_words = get_num_words(text)
-        vocabulary = get_vocabulary(text)
+        document_elements:TreeDocElement= get_text_elements_and_tree(DOCUMENT_XML_PATH)
+        num_words = get_num_words(document_elements.text)
+        vocabulary = get_vocabulary(document_elements.text)
         time.sleep(t_wait)     
         # Sacamos el idioma del texto
         preprocess_bar.progress(0.75, 'Identificando el idioma del documento...')
-        idioma_es, idioma_en = get_language(text)
+        idioma_es, idioma_en = get_language(document_elements.text)
         time.sleep(t_wait)
         # Sacamos el tema del documento
         preprocess_bar.progress(0.9, 'Identificando la temática del documento...')
-        topic:TopicResponse = get_topic(text, idioma_es, documento.name)
+        topic:TopicResponse = get_topic(document_elements.text, idioma_es, documento.name)
         preprocess_bar.progress(0.95, 'Estimando costes...')
         estimated_cost = estimate_openai_cost(num_words)
         time.sleep(t_wait)
-        # Guardamos todo en sesión
+        # Guardamos todo en sesión: Tree y elementos de texto para poder traducir y recuperar posiciones
         preprocess_bar.progress(1, 'Guardando en sesión...')
-        save_in_session(['text', 'xml_elements_list', 'idioma_es', 'idioma_en', 'tematica',
+        save_in_session(['text', 'xml_elements_list', 'tree', 'idioma_es', 'idioma_en', 'tematica',
                             'num_words', 'estimated_cost', 'vocabulary', 'vocab_size'], 
-                        [text, xml_elements_list, idioma_es, idioma_en, topic.response,
+                        [document_elements.text, document_elements.text_elements, document_elements.tree, idioma_es, idioma_en, topic.response,
                             num_words, estimated_cost, vocabulary, len(vocabulary)])
         # Acumulamos los costes
         accumulate_in_session(['real_total_cost'], [topic.total_cost])
@@ -329,10 +330,7 @@ def main() -> None:
             show_error("La clave no es válida.", validation_bar)
         # Verificar si apikey de admin
         validation_bar.progress(0.16, 'Verificando clave...')
-        time.sleep(t_wait)
-        # Mostramos nombre del usuario
-        user_name = db_handler.get_nombre(clave)
-        texto_descriptivo(f"Accediendo a la clave de {user_name}")
+        time.sleep(t_wait)        
         if not apikey_is_admin(clave, db_handler):            
             # Verificar si usuario activo
             validation_bar.progress(0.16, 'Verificando usuario activo...')
@@ -349,6 +347,12 @@ def main() -> None:
         validation_bar.progress(1, 'Validaciones completadass')
         time.sleep(t_wait)
         validation_bar.empty()
+
+        # Mostramos nombre del usuario y palabras acumuladas del total
+        user_name = db_handler.get_nombre(clave)
+        words_sofar = db_handler.get_palabras_acumulado(clave)
+        words_limit = db_handler.get_palabras_limite(clave)
+        texto_descriptivo(f"Accediendo a la clave de {user_name}: {words_sofar}/{words_limit}")
 
         # TRADUCCIONES
         # A Partir de aqui usamos la api key
@@ -388,8 +392,8 @@ def main() -> None:
         # RECONTRUCCION DEL DOCUMENTO
     if st.session_state.get('translated_document'):        
         # Modificamos los elementos guardados en sesión por su texto traducido
-        # TODO Seguramente esto no funcione y haya que iterar de nuevo sobre el documento xml para sacar los elementos
-        modify_text_element(st.session_state['xml_elements_list'])
+        # Hay que iterar de nuevo sobre el documento xml para sacar los elementos
+        modify_text_element(st.session_state['xml_elements_list'], st.session_state['tree'])
         # Generamos de nuevo el archivo Word
         archivo_descarga = add_suffix_to_filename(documento.name, 'translated')
         build_docx_from_xml(archivo_descarga)

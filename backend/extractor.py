@@ -36,6 +36,7 @@ from .utils import get_chunk, clean_word
 
 # Objetos
 TopicResponse = namedtuple('TopicResponse', ['response', 'total_cost'])
+TreeDocElement = namedtuple('TreeDocElement', ['text', 'text_elements', 'tree'])
 
 def extract_xml(document:bytes) -> None:
     """Dado un documento docx en bytes, lo descomprime
@@ -56,12 +57,13 @@ def delete_xml_path() -> None:
     if XML_FOLDER.exists():
         shutil.rmtree(XML_FOLDER)
 
-def get_text_elements() -> tuple[str, list]:
+def get_text_elements_and_tree(document_xml_path:str) -> TreeDocElement:
     """Función que extrae el texto y los elementos texto del archivo
-    'document.xml' para poder traducir posteriormente.
-    Devuelve una tupla con :
+    xml para poder traducir posteriormente.
+    Devuelve un objeto con :
         - el texto completo del documento en str
         - lista con tuplas de elementos y su texto correspondiente
+        - El tree del documento word, necesario para volver a montarlo.
 
     Returns
     -------
@@ -71,11 +73,12 @@ def get_text_elements() -> tuple[str, list]:
         lista de diccionarios con {'xml_element' y 'text'}
     """
     # Cargamos archivo document.xml donde está el texto
-    tree = ET.parse(DOCUMENT_XML_PATH)
+    tree = ET.parse(document_xml_path)
     root = tree.getroot()
     # Espacio de nombres utilizado en el documento Word XML
     namespaces = {
-        'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+        'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+        'wpc': "http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas",
     }
     # Encontrar todos los elementos de texto y extraer el texto
     text_elements = []
@@ -86,7 +89,7 @@ def get_text_elements() -> tuple[str, list]:
             para_text.append(text_elem.text) # Almacenamos aqui solo el texto para usarlo para sacar idioma o temática
             text_elements.append({'xml_element': text_elem, 'text': text_elem.text})
         texto += "\n" + "".join(para_text)
-    return texto, text_elements
+    return TreeDocElement(texto, text_elements, tree)
 
 def get_language(corpus:str) -> tuple[str]:
     """Dado un texto en str, devuelve el idioma del texto en
