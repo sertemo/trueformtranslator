@@ -35,7 +35,7 @@ from backend.extractor import (extract_word_to_xml,
                                 get_vocabulary,
                                 )
 from backend.models import XmlDocument, OpenAIResponse
-from backend.paths import DOCUMENTS_FOLDER
+from backend.paths import WORD_FOLDER
 from backend.translator import (translate,
                                 )
 from backend.validator import (exists_apikey, 
@@ -146,10 +146,10 @@ def accumulate_in_session(keys:list, values:list[int|float]) -> None:
             raise TypeError(f"Sólo válidos int o float, no {type(v)}.")
         st.session_state[k] = st.session_state.get(k, 0) + v
 
-def show_error(msg:str, progress_bar:delta_generator.DeltaGenerator=None) -> None:
+def show_error(msg:str, progress_bar_list:list[delta_generator.DeltaGenerator]=None) -> None:
     """Función que realiza 4 cosas:
     - muestra mensaje de error
-    - vacía la barra de progreso si hay
+    - vacía las barras de progreso si hay
     - muestra el footer de la app
     - para la ejecución de la app
 
@@ -157,17 +157,19 @@ def show_error(msg:str, progress_bar:delta_generator.DeltaGenerator=None) -> Non
     ----------
     msg : str
         _description_
-    progress_bar : _type_
+    progress_bar : list[DeltaGenerator]
         _description_
     """
     texto_error(msg)
     put_footer()
-    if progress_bar is not None:
-        progress_bar.empty()
+    if progress_bar_list is not None:
+        if not isinstance(progress_bar_list, list):
+            raise TypeError(f"Debes pasar una lista de progress bar. Has pasado: {type(progress_bar_list)}")
+        [barra.empty() for barra in progress_bar_list]
     st.stop()
 
 def wait_randomly(max:int=1):
-    """max es en 
+    """espera un numero max de segundos de forma aleatoria
 
     Parameters
     ----------
@@ -176,49 +178,60 @@ def wait_randomly(max:int=1):
     """
     cooldown = round(random.random(), 1) * max
     time.sleep(cooldown)
-# TODO: ACTUALIZAR A OBJETOS XMLCONTAINER Y XMLELEMENT
+
 def translation_loop(
         *,
         apikey:str,
         model:str,
-        objects_list:list[dict], 
-        progress_bar:delta_generator.DeltaGenerator,
+        xmldocuments_list:list[XmlDocument], 
+        progress_bar_list:list[delta_generator.DeltaGenerator],
         chain_params:dict) -> None:
-    n_elements = len(objects_list)
-    step = 1 / n_elements
-    for idx, obj in enumerate(objects_list):
-        progress_bar.progress(step * idx, f'Traduciendo {idx}/{n_elements}...')
-        # Sacamos el texto del objeto
-        texto:str = obj['text']
-        # No traducir caracteres etc.
-        if (len(texto) == 1) or texto.isspace() or texto.isdigit() or texto.isnumeric() or are_special_char(texto.strip()):
-            obj['translation'] = texto
-            continue
-        # Buscamos en el diccionario si el texto sin espacios ya ha sido traducido
-        if (transl:=st.session_state['diccionary'].get(texto.strip())) is not None:
-            obj['translation'] = transl
-            continue
-
-        # Pasamos por el traductor y sacamos traducción y coste
-        response:OpenAIResponse = translate(apikey, model, text=texto, **chain_params)
-        translated_text:str = response.response
-        translation_cost:float = response.total_cost        
-        # Si es una sola palabra añadimos al diccionario quitando espacios
-        if len(texto.split()) == 1:
-            st.session_state['diccionary'][texto.strip()] = translated_text.strip()
-        # Verificamos que los espacios al principio y al final coincidan con el texto original
-        if texto[0].isspace() and (not translated_text[0].isspace()):
-            translated_text = " " + translated_text
-        if texto[-1].isspace() and (not translated_text[-1].isspace()):
-            translated_text = translated_text + " "        
-        # Actualizamos el objeto añadiendo un campo traducido y el coste en sesión
-        obj['translation'] = translated_text
-        accumulate_in_session(['real_total_cost'], [translation_cost])
-        # Cooldown aleatorio
-        if random.random() < 0.5:
-            wait_randomly(2)
-        
-    progress_bar.empty()
+    # Contamos el número de documentos a traducir
+    n_documentos = len(xmldocuments_list)
+    step_document = 1 / n_documentos
+    # unpackeamos las progress_bar. En esta caso sabemos que van a haber 2.
+    document_pbar, element_pb = progress_bar_list
+    # Iteramos sobre los documentos
+    for idx, xmldocument in enumerate(xmldocuments_list, start=1):
+        document_pbar.progress(step_document * idx, f'Traduciendo documento {idx}/{n_documentos}...')
+        n_elements = len(xmldocument)
+        step_element = 1 / n_elements
+        # Iteramos sobre el documento, que devuelve los xmlelements:
+        for id, xmlelement in enumerate(xmldocument, start=1):
+            element_pb.progress(step_element * id, f"Traduciendo elemento {id}/{n_elements}...")
+            # Sacamos el texto del objeto
+            texto:str = xmlelement.text
+            # No traducir caracteres etc.
+            if (len(texto) == 1) or texto.isspace() or texto.isdigit() or texto.isnumeric() or are_special_char(texto.strip()):
+                xmlelement.translation = texto
+                continue
+            # Buscamos en el diccionario si el texto sin espacios ya ha sido traducido
+            if (transl:=st.session_state['diccionary'].get(texto.strip())) is not None:
+                xmlelement.translation = transl
+                continue
+            # Pasamos por el traductor y sacamos traducción y coste
+            response:OpenAIResponse = translate(apikey, model, text=texto, **chain_params)
+            translated_text:str = response.response
+            translation_cost:float = response.total_cost        
+            # Si es una sola palabra añadimos al diccionario quitando espacios
+            if len(texto.split()) == 1:
+                st.session_state['diccionary'][texto.strip()] = translated_text.strip()
+            # Verificamos que los espacios al principio y al final coincidan con el texto original
+            # Si no coinciden añadimos espacios pertinentes.
+            if texto[0].isspace() and (not translated_text[0].isspace()):
+                translated_text = " " + translated_text
+            if texto[-1].isspace() and (not translated_text[-1].isspace()):
+                translated_text = translated_text + " "        
+            # Actualizamos el objeto XmlElement añadiendo un campo traducido y el coste en sesión
+            xmlelement.translation = translated_text
+            accumulate_in_session(['real_total_cost'], [translation_cost])
+            # Cooldown aleatorio con probabilidad del 50%
+            if random.random() < 0.5:
+                wait_randomly(2)
+        # Al acabar todos los elementos, borramos la barra de elementos
+        element_pb.empty()
+    # Al acabar todos los documentos, borramos la barra de documentos
+    document_pbar.empty()
 
 # MAIN FUNCTION
 def main() -> None:
@@ -274,7 +287,7 @@ def main() -> None:
         # TODO Aqui verificar si hay header y footer y extraer sus textos
         preprocess_bar.progress(0.5, 'Extrayendo los textos...')
         # Creamos una lista de extraccion con todos los xml que hay que parsear (headers, footers si hay etc)
-        to_extract:list = get_to_extract_list(DOCUMENTS_FOLDER)
+        to_extract:list = get_to_extract_list(WORD_FOLDER)
         xmldocument_list:list[XmlDocument]= [get_text_elements_and_tree(doc) for doc in to_extract]
         num_words = get_num_words(xmldocument_list)
         vocabulary = get_vocabulary(xmldocument_list)
@@ -320,17 +333,17 @@ def main() -> None:
         validation_bar.progress(0.16, 'Verificando idiomas...')
         time.sleep(t_wait)
         if st.session_state['idioma_es'].lower() == idioma.lower():
-            show_error(f'El idioma del documento y el idioma de destino no pueden coincidir.', validation_bar)         
+            show_error(f'El idioma del documento y el idioma de destino no pueden coincidir.', [validation_bar])         
         # Verificar si la clave está insertada
         validation_bar.progress(0.16, 'Verificando clave...')
         time.sleep(t_wait)
         if not clave:
-            show_error('Inserta una clave válida para continuar.', validation_bar)
+            show_error('Inserta una clave válida para continuar.', [validation_bar])
         # Verificar si clave (o apikey) existe
         validation_bar.progress(0.16, 'Verificando clave...')
         time.sleep(t_wait)
         if not exists_apikey(clave, db_handler):
-            show_error("La clave no es válida.", validation_bar)
+            show_error("La clave no es válida.", [validation_bar])
         # Verificar si apikey de admin
         validation_bar.progress(0.16, 'Verificando clave...')
         time.sleep(t_wait)        
@@ -339,7 +352,7 @@ def main() -> None:
             validation_bar.progress(0.16, 'Verificando usuario activo...')
             time.sleep(t_wait)
             if not apikey_is_active(clave, db_handler):
-                show_error("Tu clase no está activada. Contacta con el administrador.", validation_bar)
+                show_error("Tu clase no está activada. Contacta con el administrador.", [validation_bar])
             # Verificar si usuario palabras consumidas + palabras del documento < palabras contratadas
             validation_bar.progress(0.16, 'Verificando palabras restantes...')
             time.sleep(t_wait)
@@ -359,14 +372,15 @@ def main() -> None:
 
         # TRADUCCIONES
         # A Partir de aqui usamos la api key
-        translation_bar = st.progress(0)
+        translation_document_bar = st.progress(0)
+        translation_element_bar = st.progress(0)
         start = time.perf_counter()
         try:
             translation_loop(
                 apikey=st.session_state.get('openai_apikey'),
                 model=st.session_state.get('model'),
-                objects_list=st.session_state['xml_elements_list'],
-                progress_bar=translation_bar,
+                xmldocuments_list=st.session_state['xml_document_list'],
+                progress_bar_list=[translation_document_bar, translation_element_bar],
                 chain_params={
                 'origin_lang': st.session_state['idioma_es'],
                 'destiny_lang': idioma,
@@ -374,10 +388,11 @@ def main() -> None:
                 'doc_context': contexto,
             })
         except Exception as exc:
-            show_error(f"Ha ocurrido un error: {exc}", translation_bar)
+            show_error(f"Ha ocurrido un error: {exc}", [translation_document_bar, translation_element_bar])
         # Activamos la flag de traducción
         activate_flags(['translated_document'])
         # Visualizar tiempo transcurrido
+        añadir_salto()
         minutos = (time.perf_counter() - start) // 60
         segundos = (time.perf_counter() - start) % 60
         texto_descriptivo(f'Traducción finalizada. Tiempo transcurrido: {minutos:.0f} minutos y {segundos:.0f} segundos.') 
@@ -391,16 +406,17 @@ def main() -> None:
             db_handler.increment_number('clave', clave, 'coste_acumulado', st.session_state['real_total_cost'])
         except Exception as exc:
             texto_error(f'Se ha producido el siguiente error al guardar los datos: {exc}')
-        
+    
         # RECONTRUCCION DEL DOCUMENTO
     if st.session_state.get('translated_document'):        
         # Modificamos los elementos guardados en sesión por su texto traducido
-        # Hay que iterar de nuevo sobre el documento xml para sacar los elementos
-        modify_text_element(st.session_state['xml_elements_list'], st.session_state['tree'])
+        # Cambiamos los elementos por los textos traducidos y escribimos los arboles
+        modify_text_element(st.session_state['xml_document_list'])
         # Generamos de nuevo el archivo Word
         archivo_descarga = add_suffix_to_filename(documento.name, 'translated')
         build_docx_from_xml(archivo_descarga)
         # Mostrar botón para descargar el archivo traducido.
+        añadir_salto()
         with open(archivo_descarga, "rb") as file:
             st.download_button(
                 label = "Descargar",

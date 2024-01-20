@@ -20,13 +20,13 @@ import zipfile
 
 from dotenv import load_dotenv
 
-from .paths import XML_FOLDER, DOCUMENT_XML_PATH
+from .models import XmlDocument
+from .paths import WORD_FOLDER
 
 load_dotenv()
 
-# TODO Modificar esta función para que acepte también footer y header
-def modify_text_element(session_list:list[dict], tree:ET.ElementTree) -> None:
-    """Modifica todos los textos de los objetos Elements susituyéndolos
+def modify_text_element(xmldocument_list:list[XmlDocument]) -> None:
+    """Modifica todos los textos de los objetos XmlDocument susituyéndolos
     por los textos traducidos y escribe el árbol nuevo
 
     Parameters
@@ -34,11 +34,14 @@ def modify_text_element(session_list:list[dict], tree:ET.ElementTree) -> None:
     elements_list : list[dict]
         _description_
     """
-    for el_dict in session_list:
-        el_dict['xml_element'].text = el_dict['translation']
-    tree.write(DOCUMENT_XML_PATH)
+    # Iteramos sobre cada documento
+    for xmldocument in xmldocument_list:
+        # Iteramos sobre los elementos
+        for xmlelement in xmldocument:
+            xmlelement.element.text = xmlelement.translation
+        xmldocument.tree.write((WORD_FOLDER / xmldocument.name))
 
-def build_docx_from_xml(archivo_destino:str, directorio_fuente:str=XML_FOLDER) -> None:
+def build_docx_from_xml(archivo_destino:str, directorio_fuente:str=WORD_FOLDER) -> None:
     """Crea un archivo docx a partir de su árbol de documentos xml
 
     Parameters

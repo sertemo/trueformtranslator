@@ -17,5 +17,5 @@
 from pathlib import Path
 
 XML_FOLDER = Path('backend/docx_xml')
-DOCUMENTS_FOLDER = XML_FOLDER / Path('word')
-DOCUMENT_XML_PATH = DOCUMENTS_FOLDER / 'document.xml'
+WORD_FOLDER = XML_FOLDER / Path('word')
+DOCUMENT_XML_PATH = WORD_FOLDER / 'document.xml'
