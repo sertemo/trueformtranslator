@@ -1,23 +1,22 @@
-"""
-Copyright 2024 Sergio Tejedor Moreno
+# Copyright 2024 Sergio Tejedor Moreno
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-Script con funciones auxiliares para el backend
-    """
+# Script con funciones auxiliares para el backend
 
 from datetime import datetime
 import os
+from pathlib import Path
 import pytz
 import random
 import string
@@ -134,3 +133,54 @@ def add_suffix_to_filename(filename_with_extension:str, suffix:str) -> str:
     """
     nombre, extension = os.path.splitext(filename_with_extension)
     return "".join([nombre, '_', suffix, extension])
+
+def get_headers_list(directorio_word:Path) -> list[Path]:
+    """Devuelve una lista con los objetos Path que corresponden a headers dentro
+    del directorio xml
+
+    Parameters
+    ----------
+    directorio_word : Path
+        _description_
+
+    Returns
+    -------
+    list
+        _description_
+    """
+    return [file for file in directorio_word.iterdir() if file.name.startswith('header')]
+
+def get_footers_list(directorio_word:Path) -> list[Path]:
+    """Devuelve una lista con los objetos Path que corresponden a footer dentro
+    del directorio xml
+
+    Parameters
+    ----------
+    directorio_word : Path
+        _description_
+
+    Returns
+    -------
+    list
+        _description_
+    """
+    return [file for file in directorio_word.iterdir() if file.name.startswith('footer')]
+
+def get_to_extract_list(directorio_word:Path) -> list[Path]:
+    """Confecciona una lista con todos los documentos xml que deben ser extraidos
+    para la traducción
+
+    Parameters
+    ----------
+    directorio_word : Path
+        _description_
+
+    Returns
+    -------
+    list[Path]
+        _description_
+    """
+    to_extract_list = [directorio_word / 'document.xml']
+    to_extract_list.extend(get_headers_list(directorio_word))
+    to_extract_list.extend(get_footers_list(directorio_word))
+    return to_extract_list 

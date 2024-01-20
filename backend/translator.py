@@ -14,15 +14,11 @@
 
 # Script con el código relacionado con la traducción de OpenAI
 
-from collections import namedtuple
-
 from langchain_community.callbacks import get_openai_callback
 
 from .chains import get_translation_prompt_chain, get_translation_chain
+from .models import OpenAIResponse
 
-# Objetos
-PromptTransResponse = namedtuple('PromptTransResponse', ['response', 'total_cost'])
-TranslationResponse = namedtuple('TranslationResponse', ['response', 'total_cost'])
 
 def translate(
         apikey:str,
@@ -32,7 +28,7 @@ def translate(
         doc_context:str,
         doc_features:str,
         text:str,
-        ) -> TranslationResponse:
+        ) -> OpenAIResponse:
     """Ejecuta la chain de traducción y devuelve un objeto
     TranslationResponse con (texto traducido, coste)
 
@@ -55,7 +51,7 @@ def translate(
 
     Returns
     -------
-    TranslationResponse
+    OpenAIResponse
         _description_
     """
     # Obtenemos la chain
@@ -69,7 +65,7 @@ def translate(
             'texto': text,
         })
         coste_total = cb.total_cost
-    return TranslationResponse(response, coste_total)
+    return OpenAIResponse(response, coste_total)
 
 def get_translation_prompt(
         apikey:str,
@@ -78,7 +74,7 @@ def get_translation_prompt(
         destiny_lang:str,
         doc_context:str,
         doc_features:str,
-        num_words:int) -> PromptTransResponse:
+        num_words:int) -> OpenAIResponse:
     """Función que le pide a chatGPT un prompt efectivo con los elementos
     característicos del documento. Devuelve un objeto con la respuesta (el prompt)
     y el coste de la query
@@ -100,7 +96,7 @@ def get_translation_prompt(
 
     Returns
     -------
-    PromptTransResponse
+    OpenAIResponse
         (response, cost)
     """
     # instanciamos la chain
@@ -115,7 +111,7 @@ def get_translation_prompt(
             'num_palabras': num_words,
         })
         coste_total = cb.total_cost
-    return PromptTransResponse(response, coste_total)
+    return OpenAIResponse(response, coste_total)
 
 
 

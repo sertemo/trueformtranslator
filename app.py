@@ -26,19 +26,17 @@ from streamlit import delta_generator
 # librerías del proyecto
 from backend.builder import modify_text_element, build_docx_from_xml
 from backend.db import UserDBHandler
-from backend.extractor import (extract_xml, 
+from backend.extractor import (extract_word_to_xml, 
                                 delete_xml_path, 
                                 get_text_elements_and_tree,
                                 get_language,
                                 get_topic,
                                 get_num_words,
                                 get_vocabulary,
-                                TopicResponse,
-                                TreeDocElement,
                                 )
-from backend.paths import DOCUMENT_XML_PATH
+from backend.models import XmlDocument, OpenAIResponse
+from backend.paths import DOCUMENTS_FOLDER
 from backend.translator import (translate,
-                                TranslationResponse
                                 )
 from backend.validator import (exists_apikey, 
                                 apikey_is_admin,
@@ -48,7 +46,8 @@ from backend.validator import (exists_apikey,
                                 )
 from backend.utils import (estimate_openai_cost,
                             get_datetime_formatted,
-                            add_suffix_to_filename
+                            add_suffix_to_filename,
+                            get_to_extract_list,
                             )
 from streamlit_utils import texto, añadir_salto, footer
 
@@ -177,7 +176,7 @@ def wait_randomly(max:int=1):
     """
     cooldown = round(random.random(), 1) * max
     time.sleep(cooldown)
-
+# TODO: ACTUALIZAR A OBJETOS XMLCONTAINER Y XMLELEMENT
 def translation_loop(
         *,
         apikey:str,
@@ -201,7 +200,7 @@ def translation_loop(
             continue
 
         # Pasamos por el traductor y sacamos traducción y coste
-        response:TranslationResponse = translate(apikey, model, text=texto, **chain_params)
+        response:OpenAIResponse = translate(apikey, model, text=texto, **chain_params)
         translated_text:str = response.response
         translation_cost:float = response.total_cost        
         # Si es una sola palabra añadimos al diccionario quitando espacios
@@ -269,30 +268,34 @@ def main() -> None:
         t_wait = 0.2
         # Descomprimimos el documento
         preprocess_bar.progress(0.25, 'Descomprimiendo el documento...')
-        extract_xml(BytesIO(documento.read()))
+        extract_word_to_xml(BytesIO(documento.read()))
         time.sleep(t_wait)
         # Extraemos los textos del document.xml y sus elementos para poder modificar
         # TODO Aqui verificar si hay header y footer y extraer sus textos
         preprocess_bar.progress(0.5, 'Extrayendo los textos...')
-        document_elements:TreeDocElement= get_text_elements_and_tree(DOCUMENT_XML_PATH)
-        num_words = get_num_words(document_elements.text)
-        vocabulary = get_vocabulary(document_elements.text)
+        # Creamos una lista de extraccion con todos los xml que hay que parsear (headers, footers si hay etc)
+        to_extract:list = get_to_extract_list(DOCUMENTS_FOLDER)
+        xmldocument_list:list[XmlDocument]= [get_text_elements_and_tree(doc) for doc in to_extract]
+        num_words = get_num_words(xmldocument_list)
+        vocabulary = get_vocabulary(xmldocument_list)
         time.sleep(t_wait)     
         # Sacamos el idioma del texto
         preprocess_bar.progress(0.75, 'Identificando el idioma del documento...')
-        idioma_es, idioma_en = get_language(document_elements.text)
+        # Para el idioma pasamos el primer documento de la lista to_extract, que será siempre el document.xml
+        idioma_es, idioma_en = get_language(xmldocument_list[0].text)
         time.sleep(t_wait)
         # Sacamos el tema del documento
         preprocess_bar.progress(0.9, 'Identificando la temática del documento...')
-        topic:TopicResponse = get_topic(document_elements.text, idioma_es, documento.name)
+        # Para sacar el tema usamos el primer documento (document.xml)
+        topic:OpenAIResponse = get_topic(xmldocument_list[0].text, idioma_es, documento.name)
         preprocess_bar.progress(0.95, 'Estimando costes...')
         estimated_cost = estimate_openai_cost(num_words)
         time.sleep(t_wait)
         # Guardamos todo en sesión: Tree y elementos de texto para poder traducir y recuperar posiciones
         preprocess_bar.progress(1, 'Guardando en sesión...')
-        save_in_session(['text', 'xml_elements_list', 'tree', 'idioma_es', 'idioma_en', 'tematica',
+        save_in_session(['xml_document_list', 'idioma_es', 'idioma_en', 'tematica',
                             'num_words', 'estimated_cost', 'vocabulary', 'vocab_size'], 
-                        [document_elements.text, document_elements.text_elements, document_elements.tree, idioma_es, idioma_en, topic.response,
+                        [xmldocument_list, idioma_es, idioma_en, topic.response,
                             num_words, estimated_cost, vocabulary, len(vocabulary)])
         # Acumulamos los costes
         accumulate_in_session(['real_total_cost'], [topic.total_cost])
