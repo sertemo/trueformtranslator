@@ -16,10 +16,10 @@
 # y/o propiedades del documento Word
 
 
-from collections import namedtuple
 import shutil
 import zipfile
 
+from docx import Document
 from langchain_community.callbacks import get_openai_callback
 from langdetect import detect, DetectorFactory
 from pathlib import Path
@@ -28,10 +28,25 @@ from textblob import TextBlob
 import xml.etree.ElementTree as ET
 
 from .chains import get_topic_chain
-from .models import XmlDocument, XmlElement, OpenAIResponse
+from .models import OpenAIResponse
 from .paths import XML_FOLDER
 from .utils import get_chunk, clean_word
 
+def get_text_from_docx(document:bytes) -> str:
+    """Devuelve el texto extraido de un documento docx
+
+    Parameters
+    ----------
+    document : bytes
+        _description_
+
+    Returns
+    -------
+    str
+        _description_
+    """
+    doc:Document = Document(document)
+    return " ".join(para.text for para in doc.paragraphs)
 
 def extract_word_to_xml(document:bytes) -> None:
     """Dado un documento docx en bytes, lo descomprime
@@ -52,20 +67,16 @@ def delete_xml_path() -> None:
     if XML_FOLDER.exists():
         shutil.rmtree(XML_FOLDER)
 
-def get_text_elements_and_tree(file_xml_path:Path) -> XmlDocument:
-    """Función que extrae el texto y los elementos texto del archivo
-    xml para poder traducir posteriormente.
-    Devuelve un objeto XmlContainer con lista de objetos XmlElement conteniendo:
-        - element: Elemento xml del texto
-        - text: el texto del elemento
-        - translation: None inicialmente. Campo para meter la traducción
+def get_text_elements_and_tree(file_xml_path:Path) -> tuple[list[tuple[ET.Element, str]], ET.ElementTree]:
+    """Dado un archivo xml extrae cada elemento de texto y devuelve una lista de tuplas 
+    con los elementos y sus textos y el tree del documento
 
     Returns
     -------
-    str
-        El texto del documento
-    list
-        lista de diccionarios con {'xml_element' y 'text'}
+    list[tuple[ET.Element, str]]
+        tupla con:
+        - lista de tuplas con (Elemento, texto del elemento)
+        - El tree del documento
     """
     # Cargamos archivo document.xml donde está el texto
     tree = ET.parse(file_xml_path)
@@ -74,23 +85,17 @@ def get_text_elements_and_tree(file_xml_path:Path) -> XmlDocument:
     namespaces = {
         'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
         'wpc': "http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas",
+        'wpi': "http://schemas.microsoft.com/office/word/2010/wordprocessingInk",
+        'wps': "http://schemas.microsoft.com/office/word/2010/wordprocessingShape",
+        'wp': "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
     }
     # Encontrar todos los elementos de texto y extraer el texto
     text_elements = []
-    texto = ""
     for paragraph in root.iterfind('.//w:p', namespaces):
-        para_text = []
         for text_elem in paragraph.iterfind('.//w:t', namespaces):
-            para_text.append(text_elem.text) # Almacenamos aqui solo el texto para usarlo para sacar idioma o temática
-            text_elements.append(XmlElement(text_elem)) # Almacenamos el objeto XmlElement
-        texto += "\n" + "".join(para_text)
-    # Devolvemos el XmlContainer
-    return XmlDocument(
-                name=file_xml_path.name,
-                tree=tree,
-                text=texto,
-                element_list=text_elements
-            )
+            text_elements.append((text_elem, text_elem.text))
+    # Devolvemos la lista y el tree
+    return text_elements, tree
 
 def get_language(corpus:str) -> tuple[str]:
     """Dado un texto en str, devuelve el idioma del texto en
@@ -117,9 +122,8 @@ def get_language(corpus:str) -> tuple[str]:
     idioma_es = TextBlob(idioma_en).translate(from_lang='en', to='es').string
     return idioma_es, idioma_en
 
-def get_num_words(xmlcontainer_list:list[XmlDocument]) -> int:
-    """Dada una lista de documentos container xml, devuelve el num de palabras
-    totales
+def get_num_words(corpus:str) -> int:
+    """Dado un texto, devuelve el número de palabras aproximado.
 
     Parameters
     ----------
@@ -131,13 +135,9 @@ def get_num_words(xmlcontainer_list:list[XmlDocument]) -> int:
     int
         _description_
     """
-    num_words = 0
-    for xmlcontainer in xmlcontainer_list:
-        for xmlelement in xmlcontainer:
-            num_words += len(xmlelement.text.split())
-    return num_words
+    return len(corpus.split())
 
-def get_vocabulary(xmlcontainer_list:list[XmlDocument]) -> set:
+def get_vocabulary(corpus:str) -> set:
     """Devuelve un set con todas las palabras diferentes del documento.
 
     Parameters
@@ -150,11 +150,8 @@ def get_vocabulary(xmlcontainer_list:list[XmlDocument]) -> set:
     set
         _description_
     """
-    vocab = set()
-    for xmlcontainer in xmlcontainer_list:
-        for xmlelement in xmlcontainer:
-            vocab.update(set(xmlelement.text.split()))
-    return set(map(clean_word, vocab))
+
+    return set(map(clean_word, corpus.split()))
 
 def get_topic(corpus:str, language:str, doc_name:str) -> OpenAIResponse:
     """Dado un corpus en formato string y un idioma,
@@ -175,7 +172,7 @@ def get_topic(corpus:str, language:str, doc_name:str) -> OpenAIResponse:
         (respuesta, coste)
     """
     # Lo primero es crear un 'dataset'. Spliteamos por salto de linea
-    dataset = corpus.split('\n')
+    dataset = corpus.split('.')
     # Sacamos dos chunk de todo el documento para enviar a openai
     #? No sería mejor sacar 3 chunks uno del principio otro del medio y otro del final de documento ?
     chunk_1 = get_chunk(dataset)

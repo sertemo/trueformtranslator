@@ -12,10 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Script con clases modelo a usar en la aplicación
-
-from collections import namedtuple
-from collections.abc import Sequence
-import xml.etree.ElementTree as ET
-
-OpenAIResponse = namedtuple('OpenAIResponse', ['response', 'total_cost'])
+# Script para realizar alguna validación de archivos xml con etree de lxml

@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Script con funciones auxiliares para el entorno de Streamlit
+# Script con funciones auxiliares Genéricas para el entorno de Streamlit
+# Podrían usarse en otros proyectos
 
 import streamlit as st
 
@@ -22,7 +23,6 @@ font_dict = {
     'Rubik Doodle Shadow': "https://fonts.googleapis.com/css2?family=Rubik+Doodle+Shadow&display=swap",
     'Dancing Script': 'https://fonts.googleapis.com/css2?family=Dancing+Script&display=swap'
 }
-
 
 def texto(texto:str, /, *, 
         font_size:int=30, 
@@ -148,3 +148,47 @@ def footer(año:int, licencia:bool) -> st.markdown:
     </div>
     """.format(licencia=licencia_formateada)
     return st.markdown(footer_formateado, unsafe_allow_html=True)
+
+def deactivate_flags(flags:list[str]) -> None:
+    """desactiva las flags pasadas haciéndola False
+    """
+    for flag in flags:
+        st.session_state[flag] = False
+
+def activate_flags(flags:list[str]) -> None:
+    """activa las flags pasadas poniéndola True
+    """
+    for flag in flags:
+        st.session_state[flag] = True
+
+def save_in_session(keys:list, values:list) -> None:
+    """Guarda en sesión las listas de textos extraidos y los elementos
+
+    Parameters
+    ----------
+    keys : list
+        Lista con los nombres de las variables a guardar
+    values : list
+        Lista con los valores de las variables a guardar
+    """
+    if len(keys) != len(values):
+        raise ValueError(f"keys y values deben tener la misma longitud: {len(keys)} != {len(values)}")
+    for k, v in zip(keys,values):
+        st.session_state[k] = v
+
+def accumulate_in_session(keys:list, values:list[int|float]) -> None:
+    """Acumula los valores pasados. Solo válido para números
+
+    Parameters
+    ----------
+    keys : list
+        lista de las keys a acumular
+    values : list[int|float]
+        valores a acumular
+    """
+    if len(keys) != len(values):
+        raise ValueError(f"keys y values deben tener la misma longitud: {len(keys)} != {len(values)}")
+    for k, v in zip(keys,values):
+        if not isinstance(v, (int, float)):
+            raise TypeError(f"Sólo válidos int o float, no {type(v)}.")
+        st.session_state[k] = st.session_state.get(k, 0) + v

@@ -20,28 +20,11 @@ import zipfile
 
 from dotenv import load_dotenv
 
-from .models import XmlDocument
-from .paths import WORD_FOLDER
+from .paths import XML_FOLDER
 
 load_dotenv()
 
-def modify_text_element(xmldocument_list:list[XmlDocument]) -> None:
-    """Modifica todos los textos de los objetos XmlDocument susituyéndolos
-    por los textos traducidos y escribe el árbol nuevo
-
-    Parameters
-    ----------
-    elements_list : list[dict]
-        _description_
-    """
-    # Iteramos sobre cada documento
-    for xmldocument in xmldocument_list:
-        # Iteramos sobre los elementos
-        for xmlelement in xmldocument:
-            xmlelement.element.text = xmlelement.translation
-        xmldocument.tree.write((WORD_FOLDER / xmldocument.name))
-
-def build_docx_from_xml(archivo_destino:str, directorio_fuente:str=WORD_FOLDER) -> None:
+def build_docx_from_xml(archivo_destino:str, directorio_fuente:str=XML_FOLDER) -> None:
     """Crea un archivo docx a partir de su árbol de documentos xml
 
     Parameters

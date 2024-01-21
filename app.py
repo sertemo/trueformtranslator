@@ -17,6 +17,7 @@
 # librerías internas
 from functools import partial
 from io import BytesIO
+from pathlib import Path
 import random
 import time
 # librerías de terceros
@@ -24,9 +25,10 @@ import pandas as pd
 import streamlit as st
 from streamlit import delta_generator
 # librerías del proyecto
-from backend.builder import modify_text_element, build_docx_from_xml
+from backend.builder import build_docx_from_xml
 from backend.db import UserDBHandler
-from backend.extractor import (extract_word_to_xml, 
+from backend.extractor import (get_text_from_docx,
+                                extract_word_to_xml, 
                                 delete_xml_path, 
                                 get_text_elements_and_tree,
                                 get_language,
@@ -34,7 +36,7 @@ from backend.extractor import (extract_word_to_xml,
                                 get_num_words,
                                 get_vocabulary,
                                 )
-from backend.models import XmlDocument, OpenAIResponse
+from backend.models import OpenAIResponse
 from backend.paths import WORD_FOLDER
 from backend.translator import (translate,
                                 )
@@ -48,8 +50,15 @@ from backend.utils import (estimate_openai_cost,
                             get_datetime_formatted,
                             add_suffix_to_filename,
                             get_to_extract_list,
+                            wait_randomly,
                             )
-from streamlit_utils import texto, añadir_salto, footer
+from streamlit_utils import (texto, 
+                            añadir_salto, 
+                            footer,
+                            accumulate_in_session,
+                            activate_flags,
+                            deactivate_flags,
+                            save_in_session)
 
 
 # Constantes
@@ -83,7 +92,7 @@ texto_descriptivo = partial(texto, font_family='Dancing Script', font_size=20, c
 texto_titulo = partial(texto, font_family='Rubik Doodle Shadow', font_size=60, centrar=True)
 texto_subtitulo = partial(texto, font_family='Dancing Script', centrar=True)
 
-# Funciones
+# Funciones específicas del proyecto
 def init() -> None:
     """Inicializa variables de sesión necesarias
     """
@@ -94,18 +103,6 @@ def init() -> None:
     if st.session_state.get('translated_document') is None:
         st.session_state['translated_document'] = False
 
-def deactivate_flags(flags:list[str]) -> None:
-    """desactiva las flags pasadas haciéndola False
-    """
-    for flag in flags:
-        st.session_state[flag] = False
-
-def activate_flags(flags:list[str]) -> None:
-    """activa las flags pasadas poniéndola True
-    """
-    for flag in flags:
-        st.session_state[flag] = True
-
 def reset_all() -> None:
     """Desactiva todas las flags y borra la ruta xml completa
     Borra toda la sesión
@@ -114,39 +111,7 @@ def reset_all() -> None:
     delete_xml_path()
     st.session_state.clear()
 
-def save_in_session(keys:list, values:list) -> None:
-    """Guarda en sesión las listas de textos extraidos y los elementos
-
-    Parameters
-    ----------
-    keys : list
-        Lista con los nombres de las variables a guardar
-    values : list
-        Lista con los valores de las variables a guardar
-    """
-    if len(keys) != len(values):
-        raise ValueError(f"keys y values deben tener la misma longitud: {len(keys)} != {len(values)}")
-    for k, v in zip(keys,values):
-        st.session_state[k] = v
-
-def accumulate_in_session(keys:list, values:list[int|float]) -> None:
-    """Acumula los valores pasados. Solo válido para números
-
-    Parameters
-    ----------
-    keys : list
-        lista de las keys a acumular
-    values : list[int|float]
-        valores a acumular
-    """
-    if len(keys) != len(values):
-        raise ValueError(f"keys y values deben tener la misma longitud: {len(keys)} != {len(values)}")
-    for k, v in zip(keys,values):
-        if not isinstance(v, (int, float)):
-            raise TypeError(f"Sólo válidos int o float, no {type(v)}.")
-        st.session_state[k] = st.session_state.get(k, 0) + v
-
-def show_error(msg:str, progress_bar_list:list[delta_generator.DeltaGenerator]=None) -> None:
+def show_error_and_stop(msg:str, progress_bar_list:list[delta_generator.DeltaGenerator]=None) -> None:
     """Función que realiza 4 cosas:
     - muestra mensaje de error
     - vacía las barras de progreso si hay
@@ -168,70 +133,71 @@ def show_error(msg:str, progress_bar_list:list[delta_generator.DeltaGenerator]=N
         [barra.empty() for barra in progress_bar_list]
     st.stop()
 
-def wait_randomly(max:int=1):
-    """espera un numero max de segundos de forma aleatoria
-
-    Parameters
-    ----------
-    max : int
-        _description_
-    """
-    cooldown = round(random.random(), 1) * max
-    time.sleep(cooldown)
-
-def translation_loop(
+def extract_translate_replace(
         *,
         apikey:str,
         model:str,
-        xmldocuments_list:list[XmlDocument], 
+        document_words:int,
+        to_extract_list:list[Path],
         progress_bar_list:list[delta_generator.DeltaGenerator],
-        chain_params:dict) -> None:
+        chain_params:dict
+        ) -> None:
+    # Unpack de las progress bar
+    document_bar, element_bar = progress_bar_list
     # Contamos el número de documentos a traducir
-    n_documentos = len(xmldocuments_list)
+    n_documentos = len(to_extract_list)
     step_document = 1 / n_documentos
-    # unpackeamos las progress_bar. En esta caso sabemos que van a haber 2.
-    document_pbar, element_pb = progress_bar_list
-    # Iteramos sobre los documentos
-    for idx, xmldocument in enumerate(xmldocuments_list, start=1):
-        document_pbar.progress(step_document * idx, f'Traduciendo documento {idx}/{n_documentos}...')
-        n_elements = len(xmldocument)
-        step_element = 1 / n_elements
-        # Iteramos sobre el documento, que devuelve los xmlelements:
-        for id, xmlelement in enumerate(xmldocument, start=1):
-            element_pb.progress(step_element * id, f"Traduciendo elemento {id}/{n_elements}...")
-            # Sacamos el texto del objeto
-            texto:str = xmlelement.text
+
+    for idx, doc in enumerate(to_extract_list, start=1):
+        document_bar.progress(idx * step_document, f"Gestionando documento {idx}/{n_documentos}...")
+        # Creamos el tree y el root
+        text_elements, tree = get_text_elements_and_tree(doc)
+        n_elements = len(text_elements)
+        # Hacemos un sanity check: si n_elements > que document_words, algo se ha parseado mal
+        if n_elements > document_words:
+            show_error_and_stop("El documento no se ha extraído correctamente debido a su formateo.\
+                                    Por favor, asegúrate de que el documento haya sido escrito por ti,", [document_bar, element_bar])
+        step_process = 1 / n_elements
+        for id, (element, text) in enumerate(text_elements, start=1):
+            element_bar.progress(id * step_process, f"Traduciendo elemento {id}/{n_elements}")
+            # Validaciones de traducción
             # No traducir caracteres etc.
-            if (len(texto) == 1) or texto.isspace() or texto.isdigit() or texto.isnumeric() or are_special_char(texto.strip()):
-                xmlelement.translation = texto
+            if (len(text) == 1) or text.isspace() or text.isdigit() or text.isnumeric() or are_special_char(text.strip()):
+                element.text = text
                 continue
             # Buscamos en el diccionario si el texto sin espacios ya ha sido traducido
-            if (transl:=st.session_state['diccionary'].get(texto.strip())) is not None:
-                xmlelement.translation = transl
+            if (transl:=st.session_state['diccionary'].get(text.strip())) is not None:
+                element.text = transl
                 continue
-            # Pasamos por el traductor y sacamos traducción y coste
-            response:OpenAIResponse = translate(apikey, model, text=texto, **chain_params)
+            # Pasamos por el traductor
+            response:OpenAIResponse = translate(apikey=apikey,
+                                            model=model,
+                                            text=text,
+                                            **chain_params)
             translated_text:str = response.response
-            translation_cost:float = response.total_cost        
+            translation_cost:float = response.total_cost
             # Si es una sola palabra añadimos al diccionario quitando espacios
-            if len(texto.split()) == 1:
-                st.session_state['diccionary'][texto.strip()] = translated_text.strip()
+            if len(text.split()) == 1:
+                st.session_state['diccionary'][text.strip()] = translated_text.strip()
             # Verificamos que los espacios al principio y al final coincidan con el texto original
             # Si no coinciden añadimos espacios pertinentes.
-            if texto[0].isspace() and (not translated_text[0].isspace()):
+            if text[0].isspace() and (not translated_text[0].isspace()):
                 translated_text = " " + translated_text
-            if texto[-1].isspace() and (not translated_text[-1].isspace()):
-                translated_text = translated_text + " "        
-            # Actualizamos el objeto XmlElement añadiendo un campo traducido y el coste en sesión
-            xmlelement.translation = translated_text
+            if text[-1].isspace() and (not translated_text[-1].isspace()):
+                translated_text = translated_text + " " 
+            # Sustituimos el texto traducido en el elemento
+            element.text = translated_text
+            # Acumulamos coste en sesión
             accumulate_in_session(['real_total_cost'], [translation_cost])
             # Cooldown aleatorio con probabilidad del 50%
             if random.random() < 0.5:
                 wait_randomly(2)
-        # Al acabar todos los elementos, borramos la barra de elementos
-        element_pb.empty()
-    # Al acabar todos los documentos, borramos la barra de documentos
-    document_pbar.empty()
+        # Limpiamos la barra de progreso
+        element_bar.empty()
+        # Guardamos el arbol en el archivo
+        tree.write(doc)
+    # Limpiamos la barra de documentos
+    document_bar.empty()
 
 # MAIN FUNCTION
 def main() -> None:
@@ -271,44 +237,36 @@ def main() -> None:
                                 label_visibility="hidden",
                                 index=0)
     añadir_salto()
-    # EXTRACCIONES
+    # EXTRACCION
     texto_descriptivo("Carga tu documento Word")
     documento = st.file_uploader("documento", label_visibility="hidden", type=["docx"], on_change=reset_all)
     if documento and not st.session_state.get('parsed_document'):
-        # TODO Meter todo en una pipeline ?
         # Creamos la barra de progreso
         preprocess_bar = st.progress(0)
-        t_wait = 0.2
-        # Descomprimimos el documento
-        preprocess_bar.progress(0.25, 'Descomprimiendo el documento...')
-        extract_word_to_xml(BytesIO(documento.read()))
-        time.sleep(t_wait)
-        # Extraemos los textos del document.xml y sus elementos para poder modificar
-        # TODO Aqui verificar si hay header y footer y extraer sus textos
-        preprocess_bar.progress(0.5, 'Extrayendo los textos...')
-        # Creamos una lista de extraccion con todos los xml que hay que parsear (headers, footers si hay etc)
-        to_extract:list = get_to_extract_list(WORD_FOLDER)
-        xmldocument_list:list[XmlDocument]= [get_text_elements_and_tree(doc) for doc in to_extract]
-        num_words = get_num_words(xmldocument_list)
-        vocabulary = get_vocabulary(xmldocument_list)
+        t_wait = 0.2        
+        # Extraemos los textos
+        preprocess_bar.progress(0.25, 'Extrayendo los textos...')
+        docx_text = get_text_from_docx(BytesIO(documento.read()))
+        num_words = get_num_words(docx_text)
+        vocabulary = get_vocabulary(docx_text)
         time.sleep(t_wait)     
         # Sacamos el idioma del texto
-        preprocess_bar.progress(0.75, 'Identificando el idioma del documento...')
+        preprocess_bar.progress(0.50, 'Identificando el idioma del documento...')
         # Para el idioma pasamos el primer documento de la lista to_extract, que será siempre el document.xml
-        idioma_es, idioma_en = get_language(xmldocument_list[0].text)
+        idioma_es, idioma_en = get_language(docx_text)
         time.sleep(t_wait)
         # Sacamos el tema del documento
-        preprocess_bar.progress(0.9, 'Identificando la temática del documento...')
+        preprocess_bar.progress(0.75, 'Identificando la temática del documento...')
         # Para sacar el tema usamos el primer documento (document.xml)
-        topic:OpenAIResponse = get_topic(xmldocument_list[0].text, idioma_es, documento.name)
+        topic:OpenAIResponse = get_topic(docx_text, idioma_es, documento.name)
         preprocess_bar.progress(0.95, 'Estimando costes...')
         estimated_cost = estimate_openai_cost(num_words)
         time.sleep(t_wait)
-        # Guardamos todo en sesión: Tree y elementos de texto para poder traducir y recuperar posiciones
+        # Guardamos todo en sesión
         preprocess_bar.progress(1, 'Guardando en sesión...')
-        save_in_session(['xml_document_list', 'idioma_es', 'idioma_en', 'tematica',
+        save_in_session(['docx_text', 'idioma_es', 'idioma_en', 'tematica',
                             'num_words', 'estimated_cost', 'vocabulary', 'vocab_size'], 
-                        [xmldocument_list, idioma_es, idioma_en, topic.response,
+                        [docx_text, idioma_es, idioma_en, topic.response,
                             num_words, estimated_cost, vocabulary, len(vocabulary)])
         # Acumulamos los costes
         accumulate_in_session(['real_total_cost'], [topic.total_cost])
@@ -333,17 +291,17 @@ def main() -> None:
         validation_bar.progress(0.16, 'Verificando idiomas...')
         time.sleep(t_wait)
         if st.session_state['idioma_es'].lower() == idioma.lower():
-            show_error(f'El idioma del documento y el idioma de destino no pueden coincidir.', [validation_bar])         
+            show_error_and_stop(f'El idioma del documento y el idioma de destino no pueden coincidir.', [validation_bar])         
         # Verificar si la clave está insertada
         validation_bar.progress(0.16, 'Verificando clave...')
         time.sleep(t_wait)
         if not clave:
-            show_error('Inserta una clave válida para continuar.', [validation_bar])
+            show_error_and_stop('Inserta una clave válida para continuar.', [validation_bar])
         # Verificar si clave (o apikey) existe
         validation_bar.progress(0.16, 'Verificando clave...')
         time.sleep(t_wait)
         if not exists_apikey(clave, db_handler):
-            show_error("La clave no es válida.", [validation_bar])
+            show_error_and_stop("La clave no es válida.", [validation_bar])
         # Verificar si apikey de admin
         validation_bar.progress(0.16, 'Verificando clave...')
         time.sleep(t_wait)        
@@ -352,12 +310,12 @@ def main() -> None:
             validation_bar.progress(0.16, 'Verificando usuario activo...')
             time.sleep(t_wait)
             if not apikey_is_active(clave, db_handler):
-                show_error("Tu clase no está activada. Contacta con el administrador.", [validation_bar])
+                show_error_and_stop("Tu clase no está activada. Contacta con el administrador.", [validation_bar])
             # Verificar si usuario palabras consumidas + palabras del documento < palabras contratadas
             validation_bar.progress(0.16, 'Verificando palabras restantes...')
             time.sleep(t_wait)
             if not has_words_left(clave, num_words, db_handler):
-                show_error(f"Has sobrepasado tu límite de palabras a traducir: {db_handler.get_palabras_limite(clave)}")
+                show_error_and_stop(f"Has sobrepasado tu límite de palabras a traducir: {db_handler.get_palabras_limite(clave)}")
         # Guardamos la api key y el modelo en sesión
         save_in_session(['openai_apikey', 'model'], [db_handler.get_api_key(clave), db_handler.get_model(clave)])
         validation_bar.progress(1, 'Validaciones completadass')
@@ -372,15 +330,21 @@ def main() -> None:
 
         # TRADUCCIONES
         # A Partir de aqui usamos la api key
-        translation_document_bar = st.progress(0)
-        translation_element_bar = st.progress(0)
+        document_bar = st.progress(0)
+        element_bar = st.progress(0)
         start = time.perf_counter()
+        # Sacamos los archivos xml del documento
+        extract_word_to_xml(BytesIO(documento.read()))
+        # Confeccionamos la lista de documentos xml a parsear
+        to_extract_list = get_to_extract_list(WORD_FOLDER)
+        # lanzamos el bucle de traducción y reemplazo
         try:
-            translation_loop(
+            extract_translate_replace(
                 apikey=st.session_state.get('openai_apikey'),
                 model=st.session_state.get('model'),
-                xmldocuments_list=st.session_state['xml_document_list'],
-                progress_bar_list=[translation_document_bar, translation_element_bar],
+                to_extract_list=to_extract_list,
+                document_words=st.session_state['num_words'],
+                progress_bar_list=[document_bar, element_bar],
                 chain_params={
                 'origin_lang': st.session_state['idioma_es'],
                 'destiny_lang': idioma,
@@ -388,7 +352,7 @@ def main() -> None:
                 'doc_context': contexto,
             })
         except Exception as exc:
-            show_error(f"Ha ocurrido un error: {exc}", [translation_document_bar, translation_element_bar])
+            show_error_and_stop(f"Ha ocurrido un error: {exc}", [document_bar, element_bar])
         # Activamos la flag de traducción
         activate_flags(['translated_document'])
         # Visualizar tiempo transcurrido
@@ -407,13 +371,10 @@ def main() -> None:
         except Exception as exc:
             texto_error(f'Se ha producido el siguiente error al guardar los datos: {exc}')
     
-        # RECONTRUCCION DEL DOCUMENTO
+        # RECONTRUCCION  Y DESCARGA DEL DOCUMENTO
     if st.session_state.get('translated_document'):        
-        # Modificamos los elementos guardados en sesión por su texto traducido
-        # Cambiamos los elementos por los textos traducidos y escribimos los arboles
-        modify_text_element(st.session_state['xml_document_list'])
         # Generamos de nuevo el archivo Word
-        archivo_descarga = add_suffix_to_filename(documento.name, 'translated')
+        archivo_descarga = add_suffix_to_filename(documento.name, f'en_{idioma}')
         build_docx_from_xml(archivo_descarga)
         # Mostrar botón para descargar el archivo traducido.
         añadir_salto()
@@ -427,12 +388,9 @@ def main() -> None:
                 use_container_width=True,
                 help="Descarga el documento traducido"
             )
-
     st.session_state
-
     # Footer
     put_footer()
-
 
 if __name__ == '__main__':
     main()

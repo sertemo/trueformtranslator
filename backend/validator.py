@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Script con el código relacionado con funciones de validación
+# Script con el código relacionado con funciones de validación. Deben devolver bools
 import re
 import string
 
@@ -112,11 +112,4 @@ def are_special_char(texto:str) -> bool:
     caracteres_especiales = re.escape(string.punctuation + '“”')
     # Comprobar si todos los caracteres en la palabra coinciden con la expresión regular
     return re.fullmatch("[" + caracteres_especiales + "]+", texto) is not None
-
-# TODO
-def theres_footer() -> bool:
-    pass
-
-def theres_header() -> bool:
-    pass
 

@@ -20,6 +20,7 @@ from pathlib import Path
 import pytz
 import random
 import string
+import time
 
 PRICING_PER_TOKEN = {
     'gpt-3.5-turbo': 0.0020e-3,
@@ -183,4 +184,15 @@ def get_to_extract_list(directorio_word:Path) -> list[Path]:
     to_extract_list = [directorio_word / 'document.xml']
     to_extract_list.extend(get_headers_list(directorio_word))
     to_extract_list.extend(get_footers_list(directorio_word))
-    return to_extract_list 
+    return to_extract_list
+
+def wait_randomly(max:int=1):
+    """espera un numero max de segundos de forma aleatoria
+
+    Parameters
+    ----------
+    max : int
+        _description_
+    """
+    cooldown = round(random.random(), 1) * max
+    time.sleep(cooldown)
