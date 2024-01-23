@@ -17,11 +17,11 @@
 # librerías internas
 from functools import partial
 from io import BytesIO
+import os
 from pathlib import Path
 import random
 import time
 # librerías de terceros
-import pandas as pd
 import streamlit as st
 from streamlit import delta_generator
 # librerías del proyecto
@@ -46,6 +46,7 @@ from backend.validator import (exists_apikey,
                                 has_words_left,
                                 are_special_char
                                 )
+from backend.xml_validator import all_xml_files_good
 from backend.utils import (estimate_openai_cost,
                             get_datetime_formatted,
                             add_suffix_to_filename,
@@ -138,6 +139,8 @@ def extract_translate_replace(
         apikey:str,
         model:str,
         document_words:int,
+        target_language:str,
+        filename:str,
         to_extract_list:list[Path],
         progress_bar_list:list[delta_generator.DeltaGenerator],
         chain_params:dict
@@ -159,7 +162,7 @@ def extract_translate_replace(
                                     Por favor, asegúrate de que el documento haya sido escrito por ti,", [document_bar, element_bar])
         step_process = 1 / n_elements
         for id, (element, text) in enumerate(text_elements, start=1):
-            element_bar.progress(id * step_process, f"Traduciendo elemento {id}/{n_elements}")
+            element_bar.progress(id * step_process, f"Traduciendo al {target_language} elemento {id}/{n_elements}")
             # Validaciones de traducción
             # No traducir caracteres etc.
             if (len(text) == 1) or text.isspace() or text.isdigit() or text.isnumeric() or are_special_char(text.strip()):
@@ -196,6 +199,17 @@ def extract_translate_replace(
         element_bar.empty()
         # Guardamos el arbol en el archivo
         tree.write(doc)
+    # Traducimos el nombre del documento
+    response:OpenAIResponse = translate(apikey=apikey,
+                                            model=model,
+                                            text=filename,
+                                            **chain_params)
+    translated_filename = response.response
+    translation_cost = response.total_cost
+    # Acumulamos los costes en sesión
+    accumulate_in_session(['real_total_cost'], [translation_cost])
+    # Guardamos en sesión el nombre traducido
+    save_in_session(['translated_filename'], [translated_filename])
     # Limpiamos la barra de documentos
     document_bar.empty()
 
@@ -241,6 +255,8 @@ def main() -> None:
     texto_descriptivo("Carga tu documento Word")
     documento = st.file_uploader("documento", label_visibility="hidden", type=["docx"], on_change=reset_all)
     if documento and not st.session_state.get('parsed_document'):
+        # Guardamos el nombre del archivo en sesión
+        nombre_archivo, ext_archivo = os.path.splitext(documento.name)
         # Creamos la barra de progreso
         preprocess_bar = st.progress(0)
         t_wait = 0.2        
@@ -264,9 +280,9 @@ def main() -> None:
         time.sleep(t_wait)
         # Guardamos todo en sesión
         preprocess_bar.progress(1, 'Guardando en sesión...')
-        save_in_session(['docx_text', 'idioma_es', 'idioma_en', 'tematica',
+        save_in_session(['nombre_archivo', 'docx_text', 'idioma_es', 'idioma_en', 'tematica',
                             'num_words', 'estimated_cost', 'vocabulary', 'vocab_size'], 
-                        [docx_text, idioma_es, idioma_en, topic.response,
+                        [nombre_archivo, docx_text, idioma_es, idioma_en, topic.response,
                             num_words, estimated_cost, vocabulary, len(vocabulary)])
         # Acumulamos los costes
         accumulate_in_session(['real_total_cost'], [topic.total_cost])
@@ -342,6 +358,8 @@ def main() -> None:
             extract_translate_replace(
                 apikey=st.session_state.get('openai_apikey'),
                 model=st.session_state.get('model'),
+                target_language=idioma,
+                filename=st.session_state.get('nombre_archivo'),
                 to_extract_list=to_extract_list,
                 document_words=st.session_state['num_words'],
                 progress_bar_list=[document_bar, element_bar],
@@ -353,6 +371,10 @@ def main() -> None:
             })
         except Exception as exc:
             show_error_and_stop(f"Ha ocurrido un error: {exc}", [document_bar, element_bar])
+        # Pasamos por el validator de XML para para en caso de que haya salido algo mal
+        xml_ok, error = all_xml_files_good(WORD_FOLDER)
+        if not xml_ok:
+            show_error_and_stop(f'Ha habido un error con los XML: {", ".join(error)}. Inténtalo con otro archivo.')
         # Activamos la flag de traducción
         activate_flags(['translated_document'])
         # Visualizar tiempo transcurrido
@@ -374,7 +396,7 @@ def main() -> None:
         # RECONTRUCCION  Y DESCARGA DEL DOCUMENTO
     if st.session_state.get('translated_document'):        
         # Generamos de nuevo el archivo Word
-        archivo_descarga = add_suffix_to_filename(documento.name, f'en_{idioma}')
+        archivo_descarga = add_suffix_to_filename(documento.name, st.session_state.get('translated_filename'))
         build_docx_from_xml(archivo_descarga)
         # Mostrar botón para descargar el archivo traducido.
         añadir_salto()
