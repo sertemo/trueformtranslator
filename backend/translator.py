@@ -16,7 +16,10 @@
 
 from langchain_community.callbacks import get_openai_callback
 
-from .chains import get_translation_prompt_chain, get_translation_chain
+from .chains import (get_translation_prompt_chain, 
+                        get_translation_chain, 
+                        get_translation_chain_with_memory
+                        )
 from .models import OpenAIResponse
 
 
@@ -27,6 +30,8 @@ def translate(
         destiny_lang:str,
         doc_context:str,
         doc_features:str,
+        texto_anterior:str,
+        texto_posterior:str,
         text:str,
         ) -> OpenAIResponse:
     """Ejecuta la chain de traducción y devuelve un objeto
@@ -55,7 +60,7 @@ def translate(
         _description_
     """
     # Obtenemos la chain
-    chain = get_translation_chain(apikey, model)
+    chain = get_translation_chain_with_memory(apikey, model) # o get_translation_chain
     with get_openai_callback() as cb:
         response = chain.invoke({
             'idioma_origen': origin_lang,
@@ -63,11 +68,13 @@ def translate(
             'tematica': doc_features,
             'contexto': doc_context,
             'texto': text,
+            'texto_anterior': texto_anterior,
+            'texto_posterior': texto_posterior,
         })
         coste_total = cb.total_cost
     return OpenAIResponse(response, coste_total)
 
-def get_translation_prompt(
+def get_translation_prompt( # ! Deprecated
         apikey:str,
         model:str,
         origin_lang:str, 

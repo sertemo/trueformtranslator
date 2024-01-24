@@ -82,7 +82,7 @@ def get_topic_chain() -> RunnableSequence:
         | StrOutputParser()
     )
     return chain
-# TODO insertar 'memoria' pasandole los textos anteriores y los posteriores ?
+
 def get_translation_chain(apikey:str, model:str) -> RunnableSequence:
     """Devuelve la chain para la traducción de los textos.
 
@@ -113,6 +113,52 @@ def get_translation_chain(apikey:str, model:str) -> RunnableSequence:
         Responde solo con la traducción en {idioma_destino}.
 
         TEXTO: {texto}
+        TRADUCCIÓN:
+        ''')
+    llm = get_llm(0.1, api_key=apikey, model=model)
+
+    chain = (
+        prompt
+        | llm
+        | StrOutputParser()
+    )
+    return chain
+# Prueba de chain insertando una especie de 'memoria'
+def get_translation_chain_with_memory(apikey:str, model:str) -> RunnableSequence:
+    """Devuelve la chain para la traducción de los textos.
+    Este prompt incorpora el texto anterior y posterior
+
+    Parameters
+    ----------
+    apikey : str
+        _description_
+    model : str
+        _description_
+
+    Returns
+    -------
+    RunnableSequence
+        _description_
+    """
+    prompt = ChatPromptTemplate.from_template(
+        '''
+        Eres un experto traductor de documentos.
+        Tu misión es traducir un documento del {idioma_origen} al {idioma_destino}.
+        El documento es {tematica} de tipo {contexto}.
+        Los textos del documento a traducir serán en forma de palabras, frases o párrafos.
+        Se te pasará el texto anterior y posterior al texto a traducir para que tengas el contexto.
+        Respeta el formato del texto en la traducción. Ejemplo de Español a Francés:
+        TEXTO: ' dónde hacía calor, '
+        TRADUCCIÓN: ' où il faisait chaud, '
+
+        Traduce solo los textos en {idioma_origen}.
+        No traduzcas nombres propios.
+        Traduce solo el TEXTO A TRADUCIR.
+        Responde solo con la traducción en {idioma_destino}.
+
+        TEXTO ANTERIOR: {texto_anterior}
+        TEXTO POSTERIOR: {texto_posterior}
+        TEXTO A TRADUCIR: {texto}
         TRADUCCIÓN:
         ''')
     llm = get_llm(0.1, api_key=apikey, model=model)

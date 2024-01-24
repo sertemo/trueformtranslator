@@ -172,6 +172,25 @@ def extract_translate_replace(
             if (transl:=st.session_state['diccionary'].get(text.strip())) is not None:
                 element.text = transl
                 continue
+            # Gestionamos la 'memoria' pasando texto anterior y posterior al prompt de traducción
+            # Solo para el document.xml
+            if doc == "document.xml":
+                texto_bruto:str = st.session_state['docx_text']
+                indice_init = texto_bruto.find(text)
+                indice_anterior = max(0, indice_init - 100) # Ojo índices del principio
+                texto_anterior = texto_bruto[indice_anterior:indice_init]
+                texto_anterior = "..." + " ".join(texto_anterior.split()[1:]) # Quitamos primera palabra y añadimos ...
+                # Sacamos el texto posterior
+                indice_fin = indice_init + len(text)
+                indice_posterior = min(indice_fin + 100, len(text))
+                texto_posterior =  texto[indice_fin: indice_posterior]
+                texto_posterior = " ".join(texto_posterior.split()[:-1]) + "..."
+            else:
+                texto_anterior = "..."
+                texto_posterior = "..."
+            # Añadimos texto_anterior y posterior a la chain_params
+            chain_params['texto_anterior'] = texto_anterior
+            chain_params['texto_posterior'] = texto_posterior
             # Pasamos por el traductor
             response:OpenAIResponse = translate(apikey=apikey,
                                             model=model,
@@ -228,6 +247,9 @@ def main() -> None:
     texto_titulo("TrueForm Translator")
     # Descripción
     texto_subtitulo("Traduce tus propios documentos Word a un idioma de tu elección.")
+    texto_subtitulo("Consideraciones importantes")
+    texto_descriptivo("- No se almacena ninguna información, sin embargo no se recomiendan documentos confidenciales.")
+    texto_descriptivo("- Para una traducción óptimo se recomienda que el archivo word haya sido creado por el usuario.")
     # TODO Añadir indicaciones importantes:
     # TODO Documentso words personales
     # TODO Que no sean confidenciales
@@ -256,7 +278,7 @@ def main() -> None:
     documento = st.file_uploader("documento", label_visibility="hidden", type=["docx"], on_change=reset_all)
     if documento and not st.session_state.get('parsed_document'):
         # Guardamos el nombre del archivo en sesión
-        nombre_archivo, ext_archivo = os.path.splitext(documento.name)
+        nombre_archivo, _ = os.path.splitext(documento.name)
         # Creamos la barra de progreso
         preprocess_bar = st.progress(0)
         t_wait = 0.2        
