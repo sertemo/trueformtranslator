@@ -193,6 +193,9 @@ class UserDBHandler(DBHandler):
         user_dict:dict = self.conn.find_one({"clave": clave})
         return user_dict.get("admin")
     
+    def get_clave_from_apikey(self, apikey:str) -> str | None:
+        user_dict:dict = self.conn.find_one({"apikey": apikey})
+        return user_dict.get("clave") if user_dict is not None else None
     
     def get_api_key(self, clave:str) -> str | None:
         user_dict:dict = self.conn.find_one({"clave": clave})

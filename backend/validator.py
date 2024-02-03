@@ -13,10 +13,12 @@
 # limitations under the License.
 
 # Script con el código relacionado con funciones de validación. Deben devolver bools
+from functools import wraps
 import re
 import string
 
 from .db import UserDBHandler
+
 
 def exists_apikey(clave:str, handler:UserDBHandler) -> bool:
     """True si la apikey existe en base de datos

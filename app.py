@@ -359,7 +359,7 @@ def main() -> None:
         validation_bar.progress(1, 'Validaciones completadass')
         time.sleep(t_wait)
         validation_bar.empty()
-
+        # TODO hacerlo valer para cuando el usuario meta una api key ?
         # Mostramos nombre del usuario y palabras acumuladas del total
         user_name = db_handler.get_nombre(clave)
         words_sofar = db_handler.get_palabras_acumulado(clave)

@@ -31,10 +31,11 @@ Características que quiero incorporar:
 - [x] Mapear los textos y realizar las traducciones.
 - [] Optimizar y generalizar el bucle de traducción.
 - [] Estudiar casos particulares.
-- [] Modificar cada elemento con su texto traducido.
-- [] Guardar el archivo xml sustituyendo el anterior.
-- [] Montar de nuevo un docx (zipfile)
-- [] Generar un enlace de descarga
+- [x] Modificar cada elemento con su texto traducido.
+- [x] Guardar el archivo xml sustituyendo el anterior.
+- [x] Montar de nuevo un docx (zipfile)
+- [x] Generar un enlace de descarga
+- [] Testear caso de ligaduras en francés.
 
 ## Librerías
 - poetry para la gestión de dependencias
