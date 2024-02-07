@@ -29,13 +29,13 @@ Características que quiero incorporar:
 - [x] Realizar validaciones.
 - [-] Crear el DataFrame NO. Al final utilizo dicts.
 - [x] Mapear los textos y realizar las traducciones.
-- [] Optimizar y generalizar el bucle de traducción.
+- [x] Optimizar y generalizar el bucle de traducción.
 - [] Estudiar casos particulares.
 - [x] Modificar cada elemento con su texto traducido.
 - [x] Guardar el archivo xml sustituyendo el anterior.
 - [x] Montar de nuevo un docx (zipfile)
 - [x] Generar un enlace de descarga
-- [] Testear caso de ligaduras en francés.
+- [] Testear caso de ligaduras en francés ( con prompt de memoria)
 
 ## Librerías
 - poetry para la gestión de dependencias

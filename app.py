@@ -249,11 +249,7 @@ def main() -> None:
     texto_subtitulo("Traduce tus propios documentos Word a un idioma de tu elección.")
     texto_subtitulo("Consideraciones importantes")
     texto_descriptivo("- No se almacena ninguna información, sin embargo no se recomiendan documentos confidenciales.")
-    texto_descriptivo("- Para una traducción óptimo se recomienda que el archivo word haya sido creado por el usuario.")
-    # TODO Añadir indicaciones importantes:
-    # TODO Documentso words personales
-    # TODO Que no sean confidenciales
-    # TODO Escoger bien el contexto etc.
+    texto_descriptivo("- Para una traducción óptima se recomienda que el archivo word haya sido creado por el usuario.")
     añadir_salto()
     # inputs
     col1, col2 = st.columns(2)
@@ -359,7 +355,6 @@ def main() -> None:
         validation_bar.progress(1, 'Validaciones completadass')
         time.sleep(t_wait)
         validation_bar.empty()
-        # TODO hacerlo valer para cuando el usuario meta una api key ?
         # Mostramos nombre del usuario y palabras acumuladas del total
         user_name = db_handler.get_nombre(clave)
         words_sofar = db_handler.get_palabras_acumulado(clave)
