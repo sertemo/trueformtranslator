@@ -94,7 +94,7 @@ def has_words_left(clave:str, document_words:int, handler:UserDBHandler) -> bool
         _description_
     """
     limite = handler.get_palabras_limite(clave)
-    palabras_hasta_ahora = handler.get_palabras_actual(clave)
+    palabras_hasta_ahora = handler.get_palabras_acumulado(clave)
     return palabras_hasta_ahora + document_words < limite
 
 def are_special_char(texto:str) -> bool:

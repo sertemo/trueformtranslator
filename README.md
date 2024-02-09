@@ -36,6 +36,7 @@ Características que quiero incorporar:
 - [x] Montar de nuevo un docx (zipfile)
 - [x] Generar un enlace de descarga
 - [] Testear caso de ligaduras en francés ( con prompt de memoria)
+- [] Agregar checkpoints para archivos de muchas palabras
 
 ## Librerías
 - poetry para la gestión de dependencias

@@ -59,7 +59,8 @@ from streamlit_utils import (texto,
                             accumulate_in_session,
                             activate_flags,
                             deactivate_flags,
-                            save_in_session)
+                            save_in_session,
+                            imagen_con_enlace)
 
 
 # Constantes
@@ -68,6 +69,8 @@ LISTA_IDIOMAS = [
     'Francés',
     'Inglés',
     'Alemán',
+    'Italiano',
+    'Portugués',
 ]
 LISTA_ESPECIALIDADES = [
     'Genérico',
@@ -83,6 +86,8 @@ LISTA_ESPECIALIDADES = [
     'Tecnología y Software',
     'Videojuegos',
 ]
+CHECKPOINT_ELEMENT_STEP = 50
+
 # Instanciamos el handler para interacción con db
 db_handler = UserDBHandler('usuarios')
 # instancia footer con argumentos fijos
@@ -138,6 +143,7 @@ def extract_translate_replace(
         *,
         apikey:str,
         model:str,
+        clave:str,
         document_words:int,
         target_language:str,
         filename:str,
@@ -150,6 +156,8 @@ def extract_translate_replace(
     # Contamos el número de documentos a traducir
     n_documentos = len(to_extract_list)
     step_document = 1 / n_documentos
+    # Inicializamos en sesión el número de running words traducidas
+    st.session_state['running_translated_words'] = 0
 
     for idx, doc in enumerate(to_extract_list, start=1):
         document_bar.progress(idx * step_document, f"Gestionando documento {idx}/{n_documentos}...")
@@ -163,8 +171,10 @@ def extract_translate_replace(
         step_process = 1 / n_elements
         for id, (element, text) in enumerate(text_elements, start=1):
             element_bar.progress(id * step_process, f"Traduciendo al {target_language} elemento {id}/{n_elements}")
-            # Validaciones de traducción
+            # Validaciones de traducción            
+            # Sacamos número de palabras del elemento
             # No traducir caracteres etc.
+            num_running_words = len(text.strip().split())
             if (len(text) == 1) or text.isspace() or text.isdigit() or text.isnumeric() or are_special_char(text.strip()):
                 element.text = text
                 continue
@@ -183,7 +193,7 @@ def extract_translate_replace(
                 # Sacamos el texto posterior
                 indice_fin = indice_init + len(text)
                 indice_posterior = min(indice_fin + 100, len(text))
-                texto_posterior =  texto[indice_fin: indice_posterior]
+                texto_posterior = texto[indice_fin: indice_posterior]
                 texto_posterior = " ".join(texto_posterior.split()[:-1]) + "..."
             else:
                 texto_anterior = "..."
@@ -209,8 +219,13 @@ def extract_translate_replace(
                 translated_text = translated_text + " " 
             # Sustituimos el texto traducido en el elemento
             element.text = translated_text
-            # Acumulamos coste en sesión
-            accumulate_in_session(['real_total_cost'], [translation_cost])
+            # Acumulamos coste en sesión y el número de palabras
+            accumulate_in_session(['real_total_cost', 'running_translated_words'], [translation_cost, num_running_words])
+            # Acumulado el texto en sesión
+            st.session_state['ultimo_texto_traducido'] = st.session_state.get('ultimo_texto_traducido', '') + translated_text
+            # Cada 50 elementos guardamos en db por si el proceso se interrumpe
+            if not id % CHECKPOINT_ELEMENT_STEP:
+                db_handler.update('clave', clave, {'ultimo_texto_traducido': st.session_state.get('ultimo_texto_traducido', '')})
             # Cooldown aleatorio con probabilidad del 50%
             if random.random() < 0.5:
                 wait_randomly(2)
@@ -231,6 +246,8 @@ def extract_translate_replace(
     save_in_session(['translated_filename'], [translated_filename])
     # Limpiamos la barra de documentos
     document_bar.empty()
+    # Guardamos en db el texto bruto traducido
+    db_handler.update('clave', clave, {'ultimo_texto_traducido': st.session_state.get('ultimo_texto_traducido', '')})
 
 # MAIN FUNCTION
 def main() -> None:
@@ -243,6 +260,8 @@ def main() -> None:
     )
     # inicializamos session state
     init()
+    # Logo
+    imagen_con_enlace('https://i.imgur.com/ITqqjOK.jpg','', centrar=True, max_width=8)
     # Titulo
     texto_titulo("TrueForm Translator")
     # Descripción
@@ -250,6 +269,7 @@ def main() -> None:
     texto_subtitulo("Consideraciones importantes")
     texto_descriptivo("- No se almacena ninguna información, sin embargo no se recomiendan documentos confidenciales.")
     texto_descriptivo("- Para una traducción óptima se recomienda que el archivo word haya sido creado por el usuario.")
+    texto_descriptivo("- Las traducciones pueden tener errores. Tómalas como un punto de partida y revísalas.")
     añadir_salto()
     # inputs
     col1, col2 = st.columns(2)
@@ -348,7 +368,7 @@ def main() -> None:
             # Verificar si usuario palabras consumidas + palabras del documento < palabras contratadas
             validation_bar.progress(0.16, 'Verificando palabras restantes...')
             time.sleep(t_wait)
-            if not has_words_left(clave, num_words, db_handler):
+            if not has_words_left(clave, st.session_state.num_words, db_handler):
                 show_error_and_stop(f"Has sobrepasado tu límite de palabras a traducir: {db_handler.get_palabras_limite(clave)}")
         # Guardamos la api key y el modelo en sesión
         save_in_session(['openai_apikey', 'model'], [db_handler.get_api_key(clave), db_handler.get_model(clave)])
@@ -374,6 +394,7 @@ def main() -> None:
         try:
             extract_translate_replace(
                 apikey=st.session_state.get('openai_apikey'),
+                clave=clave,
                 model=st.session_state.get('model'),
                 target_language=idioma,
                 filename=st.session_state.get('nombre_archivo'),
@@ -388,6 +409,18 @@ def main() -> None:
             })
         except Exception as exc:
             show_error_and_stop(f"Ha ocurrido un error: {exc}", [document_bar, element_bar])
+        finally:
+            try:
+                # Actualizamos la fecha actual y los campos último coste y últimas palabras
+                db_handler.update('clave', clave, {'ultimo_uso': get_datetime_formatted(),})
+                db_handler.update('clave', clave, {'ultimo_coste': st.session_state['real_total_cost']})
+                db_handler.update('clave', clave, {
+                    'ultimo_palabras': min(st.session_state['running_translated_words'], st.session_state['num_words'])})
+                # Incrementamos en db las palabras traducidas y el coste
+                db_handler.increment_number('clave', clave, 'palabras_acumulado', st.session_state['running_translated_words'])
+                db_handler.increment_number('clave', clave, 'coste_acumulado', st.session_state['real_total_cost'])
+            except Exception as exc:
+                texto_error(f'Se ha producido el siguiente error al guardar los datos: {exc}')
         # Pasamos por el validator de XML para para en caso de que haya salido algo mal
         xml_ok, error = all_xml_files_good(WORD_FOLDER)
         if not xml_ok:
@@ -399,16 +432,7 @@ def main() -> None:
         minutos = (time.perf_counter() - start) // 60
         segundos = (time.perf_counter() - start) % 60
         texto_descriptivo(f'Traducción finalizada. Tiempo transcurrido: {minutos:.0f} minutos y {segundos:.0f} segundos.') 
-        try:
-            # Actualizamos la fecha actual y los campos último coste y últimas palabras
-            db_handler.update('clave', clave, {'ultimo_uso': get_datetime_formatted(),})
-            db_handler.update('clave', clave, {'ultimo_coste': st.session_state['real_total_cost']})
-            db_handler.update('clave', clave, {'ultimo_palabras': st.session_state['num_words']})
-            # Incrementamos en db las palabras traducidas y el coste
-            db_handler.increment_number('clave', clave, 'palabras_acumulado', st.session_state['num_words'])
-            db_handler.increment_number('clave', clave, 'coste_acumulado', st.session_state['real_total_cost'])
-        except Exception as exc:
-            texto_error(f'Se ha producido el siguiente error al guardar los datos: {exc}')
+        
     
         # RECONTRUCCION  Y DESCARGA DEL DOCUMENTO
     if st.session_state.get('translated_document'):        

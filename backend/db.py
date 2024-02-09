@@ -73,6 +73,7 @@ class UsuarioDB(BaseModel):
     palabras_acumulado:int = 0 # palabras traducidas hasta la fecha
     facturado_accumulado:float # importe facturado hasta la fecha a este usuario
     coste_acumulado:float = 0 # coste acumulado hasta la fecha por este usuario
+    ultimo_text_traducido:str = '' # checkpoint que se van guardando del texto traducido por seguridad
 
 class DBHandler(Sequence):
     def __init__(self, collection:str, database:str=DEFAULT_DB) -> None:
@@ -221,9 +222,7 @@ class UserDBHandler(DBHandler):
         return user_dict.get("model")
 
 if __name__ == '__main__':
-    response = UserDBHandler('usuarios').find_one('nombre', 'Sergio Tejedor')
-    # Quitamos el _id
-    del response['_id']
-    print(json.dumps(response, indent=3))
+    pass
+
 
 
