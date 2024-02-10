@@ -30,6 +30,22 @@ PRICING_PER_TOKEN = {
     "gpt-4": 0.06e-3, 
 }
 
+def get_model_version(model:str) -> str:
+    """Dado un modelo de openAI, devuelve 
+    la versión: 3.5 o 4
+
+    Parameters
+    ----------
+    model : str
+        _description_
+
+    Returns
+    -------
+    str
+        _description_
+    """
+    return model.split('-')[1]
+
 def clean_word(texto:str) -> str:
     """quita los signos de puntuación de la palabra
 
@@ -116,11 +132,11 @@ def estimate_openai_cost(num_words:int, model:str='gpt-3.5-turbo') -> float:
     tokens = convert_words_to_tokens(num_words)
     return round(tokens * PRICING_PER_TOKEN[model], 4)
 
-def add_suffix_to_filename(filename_with_extension:str, suffix:str) -> str:
-    """Añade un sufijo al archivo antes de la extensión.
+def add_suffix_to_filename(filename_with_extension:str, suffixes:list) -> str:
+    """Añade un sufijos al archivo antes de la extensión separados por '_'.
     Ejemplo: 
     - doc original: La odisea.docx
-    - doc modificado: La odisea_translated.docx
+    - doc modificado: La odisea_translated_v4.docx
 
     Parameters
     ----------
@@ -130,10 +146,14 @@ def add_suffix_to_filename(filename_with_extension:str, suffix:str) -> str:
     Returns
     -------
     str
-        _description_
+        el nombre de archivo con sufijos
     """
+    if not isinstance(suffixes, list):
+        raise TypeError(f'suffixes debe ser una lista se obtuvo {type(suffixes)}')
+    
     nombre, extension = os.path.splitext(filename_with_extension)
-    return "".join([nombre, '_', suffix, extension])
+    final_suffix = "_".join(suffixes)
+    return "".join([nombre, '_', final_suffix, extension])
 
 def get_headers_list(directorio_word:Path) -> list[Path]:
     """Devuelve una lista con los objetos Path que corresponden a headers dentro

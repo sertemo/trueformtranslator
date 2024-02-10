@@ -37,6 +37,7 @@ Características que quiero incorporar:
 - [x] Generar un enlace de descarga
 - [] Testear caso de ligaduras en francés ( con prompt de memoria)
 - [] Agregar checkpoints para archivos de muchas palabras
+- [] Comparar performance de traducción entre gpt-4 y gpt-3.5
 
 ## Librerías
 - poetry para la gestión de dependencias

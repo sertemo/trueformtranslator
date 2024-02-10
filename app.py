@@ -52,6 +52,7 @@ from backend.utils import (estimate_openai_cost,
                             add_suffix_to_filename,
                             get_to_extract_list,
                             wait_randomly,
+                            get_model_version,
                             )
 from streamlit_utils import (texto, 
                             añadir_salto, 
@@ -60,7 +61,8 @@ from streamlit_utils import (texto,
                             activate_flags,
                             deactivate_flags,
                             save_in_session,
-                            imagen_con_enlace)
+                            imagen_con_enlace,
+                            )
 
 
 # Constantes
@@ -165,9 +167,9 @@ def extract_translate_replace(
         text_elements, tree = get_text_elements_and_tree(doc)
         n_elements = len(text_elements)
         # Hacemos un sanity check: si n_elements > que document_words, algo se ha parseado mal
+        #st.write(f"{n_elements=}, {document_words=}")
         if n_elements > document_words:
-            show_error_and_stop("El documento no se ha extraído correctamente debido a su formateo.\
-                                    Por favor, asegúrate de que el documento haya sido escrito por ti,", [document_bar, element_bar])
+            show_error_and_stop("El documento no se ha extraído correctamente debido a su formateo. Por favor, asegúrate de que el documento haya sido escrito por ti,", [document_bar, element_bar])
         step_process = 1 / n_elements
         for id, (element, text) in enumerate(text_elements, start=1):
             element_bar.progress(id * step_process, f"Traduciendo al {target_language} elemento {id}/{n_elements}")
@@ -266,10 +268,10 @@ def main() -> None:
     texto_titulo("TrueForm Translator")
     # Descripción
     texto_subtitulo("Traduce tus propios documentos Word a un idioma de tu elección.")
-    texto_subtitulo("Consideraciones importantes")
+    texto_subtitulo("- Consideraciones importantes -")
     texto_descriptivo("- No se almacena ninguna información, sin embargo no se recomiendan documentos confidenciales.")
     texto_descriptivo("- Para una traducción óptima se recomienda que el archivo word haya sido creado por el usuario.")
-    texto_descriptivo("- Las traducciones pueden tener errores. Tómalas como un punto de partida y revísalas.")
+    texto_descriptivo("- Las traducciones pueden contener errores. Tómalas como un punto de partida y revísalas.")
     añadir_salto()
     # inputs
     col1, col2 = st.columns(2)
@@ -330,7 +332,7 @@ def main() -> None:
         activate_flags(['parsed_document'])
         # Escribimos el número de palabras al usuario
     if st.session_state.get('num_words') is not None:
-        texto_descriptivo(f"Tu documento tiene {st.session_state['num_words']} palabras")
+        texto_descriptivo(f"Tu documento tiene {st.session_state['num_words']:,} palabras")
 
     añadir_salto()
     # Botón para traducir
@@ -379,7 +381,8 @@ def main() -> None:
         user_name = db_handler.get_nombre(clave)
         words_sofar = db_handler.get_palabras_acumulado(clave)
         words_limit = db_handler.get_palabras_limite(clave)
-        texto_descriptivo(f"Accediendo a la clave de {user_name}: {words_sofar}/{words_limit}")
+        model_version = get_model_version(st.session_state['model'])
+        texto_descriptivo(f"Accediendo a la clave de <b>{user_name}</b> - {words_sofar:,}/{words_limit:,} - v{model_version}.")
 
         # TRADUCCIONES
         # A Partir de aqui usamos la api key
@@ -431,13 +434,14 @@ def main() -> None:
         añadir_salto()
         minutos = (time.perf_counter() - start) // 60
         segundos = (time.perf_counter() - start) % 60
-        texto_descriptivo(f'Traducción finalizada. Tiempo transcurrido: {minutos:.0f} minutos y {segundos:.0f} segundos.') 
+        texto_descriptivo(f'Traducción finalizada. Tiempo transcurrido: <b>{minutos:.0f} minutos y {segundos:.0f} segundos</b>.') 
         
     
         # RECONTRUCCION  Y DESCARGA DEL DOCUMENTO
     if st.session_state.get('translated_document'):        
         # Generamos de nuevo el archivo Word
-        archivo_descarga = add_suffix_to_filename(documento.name, st.session_state.get('translated_filename'))
+        archivo_descarga = add_suffix_to_filename(documento.name, [st.session_state.get('translated_filename'), 
+                                                                    get_model_version(st.session_state['model'])])
         build_docx_from_xml(archivo_descarga)
         # Mostrar botón para descargar el archivo traducido.
         añadir_salto()
