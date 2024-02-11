@@ -78,6 +78,7 @@ LISTA_ESPECIALIDADES = [
     'Genérico',
     'Aplicaciones y móvil',
     'Belleza, Moda Cosmética',
+    'Construcción y arquitectura',
     'Empresa y finanzas',
     'Filosófico',
     'Legal',
